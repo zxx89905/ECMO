@@ -1,23 +1,23 @@
 /* eslint-disable react/prop-types */
-import { useRef, useEffect } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef, useEffect } from 'react';
 import { getSignatureBySpotifyId } from '../../services/signatureService';
+import { drawSpotifyCode } from '../../utils/spotifyCode';
 
 const parseNumeric = (value, fallback = 0) => {
   const parsed = parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const CanvasPoster = ({ onImageReady, posterData, generatePoster, onTitleSizeAdjust, customFont }) => {
+const CanvasPoster = forwardRef(function CanvasPoster({ onImageReady, posterData, generatePoster, onTitleSizeAdjust, customFont }, ref) {
     const canvasRef = useRef(null);
 
-    useEffect(() => {
-        const generatePosterContent = async () => {
-            if (!generatePoster) return;
-
-            const canvas = canvasRef.current;
+    const generatePosterContent = useCallback(async (canvas, outputWidth = 2480, outputHeight = 3508, forPreview = false) => {
+            canvas.width = outputWidth;
+            canvas.height = outputHeight;
             const ctx = canvas.getContext('2d');
             const width = 2480;
             const height = 3508;
+            ctx.setTransform(outputWidth / width, 0, 0, outputHeight / height, 0, 0);
             
             const marginSide = parseNumeric(posterData.marginSide);
             const marginTop = parseNumeric(posterData.marginTop);
@@ -79,9 +79,9 @@ const CanvasPoster = ({ onImageReady, posterData, generatePoster, onTitleSizeAdj
             };
 
             const loadCover = async (url) => {
+                if (!url) return;
                 const image = new Image();
                 image.crossOrigin = "anonymous";
-                image.src = url;
                 return new Promise((resolve) => {
                     image.onload = () => {
                         ctx.drawImage(
@@ -97,15 +97,17 @@ const CanvasPoster = ({ onImageReady, posterData, generatePoster, onTitleSizeAdj
                             verticalFade.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
                             verticalFade.addColorStop(0.8, posterData.backgroundColor);
                             ctx.fillStyle = verticalFade;
-                            ctx.fillRect(0, 0, canvas.width, 2500);
+                            ctx.fillRect(0, 0, width, 2500);
                         }
                         resolve();
                     };
+                    image.onerror = resolve;
+                    image.src = url;
                 });
             };
 
             const drawAlbumInfos = async () => {
-                let titleFontSize = posterData.titleSize ? parseNumeric(posterData.titleSize, 230) : 230;
+                let titleFontSize = posterData.titleSize ? parseNumeric(posterData.titleSize, 180) : 180;
                 const fontFamily = customFont || 'Montserrat';
                 if (!posterData.userAdjustedTitleSize && !posterData.initialTitleSizeSet) {
                     ctx.font = `bold ${titleFontSize}px ${fontFamily}`;
@@ -115,7 +117,7 @@ const CanvasPoster = ({ onImageReady, posterData, generatePoster, onTitleSizeAdj
                         ctx.font = `bold ${titleFontSize}px ${fontFamily}`;
                         titleWidth = ctx.measureText(safeText(posterData.albumName)).width;
                     }
-                    onTitleSizeAdjust(titleFontSize, true);
+                    if (forPreview) onTitleSizeAdjust(titleFontSize, true);
                 } else {
                     ctx.font = `bold ${titleFontSize}px ${fontFamily}`;
                 }
@@ -176,7 +178,6 @@ const CanvasPoster = ({ onImageReady, posterData, generatePoster, onTitleSizeAdj
                 const rectY = Math.round(2500 + baseMarginTop + baseArtistsSize * 1.3 + 130);
                 const releaseDateY = 3310;
                 const maxTextHeight = releaseDateY - 50;
-                const maxHorizontalLimit = width - marginSide;
 
                 const tracks = tracklistText.split('\n').filter(t => t.trim() !== '');
                 if (!tracks.length) return;
@@ -213,47 +214,6 @@ const CanvasPoster = ({ onImageReady, posterData, generatePoster, onTitleSizeAdj
                 return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
             };
 
-            const getContrast = (rgb) => {
-                const luminance = (c) => {
-                    const val = c / 255;
-                    return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
-                };
-                const lum = 0.2126 * luminance(rgb.r) + 0.7152 * luminance(rgb.g) + 0.0722 * luminance(rgb.b);
-                return lum > 0.179 ? "black" : "white";
-            };
-
-            const scannable = async () => {
-                const rgb = hexToRgb(posterData.backgroundColor);
-                const contrastColor = getContrast(rgb);
-                const targetColor = posterData.textColor;
-
-                const svgUrl = `https://scannables.scdn.co/uri/plain/svg/${posterData.backgroundColor.replace('#', '')}/${contrastColor}/640/spotify:album:${posterData.albumID}`;
-
-                const response = await fetch(svgUrl);
-                let svgText = await response.text();
-
-                if (contrastColor == 'black') {
-                    svgText = svgText.replace(/fill="#000000"/g, `fill="${targetColor}"`);
-                } else {
-                    svgText = svgText.replace(/fill="#ffffff"/g, `fill="${targetColor}"`);
-                }
-
-                const svgBlob = new Blob([svgText], { type: "image/svg+xml" });
-                const updatedSvgUrl = URL.createObjectURL(svgBlob);
-
-                return new Promise((resolve) => {
-                    const image = new Image();
-                    image.src = updatedSvgUrl;
-
-                    image.onload = function () {
-                        ctx.drawImage(image, 2020 - marginSide, 3235, 480, 120);
-                        const imageUrl = canvas.toDataURL('image/png');
-                        onImageReady(imageUrl);
-                        resolve();
-                    };
-                });
-            };
-
             const drawBackground = async () => {
                 ctx.clearRect(0, 0, width, height);
                 ctx.fillStyle = posterData.backgroundColor;
@@ -262,7 +222,7 @@ const CanvasPoster = ({ onImageReady, posterData, generatePoster, onTitleSizeAdj
 
             await drawBackground();
             if (posterData.useUncompressed) {
-                await loadCover(await posterData.uncompressedAlbumCover);
+                await loadCover(posterData.uncompressedAlbumCover);
             } else {
                 await loadCover(posterData.albumCover);
             }
@@ -272,13 +232,30 @@ const CanvasPoster = ({ onImageReady, posterData, generatePoster, onTitleSizeAdj
                 await drawTracklist();
             }
             await drawArtistSignature();
-            await scannable();
-        };
+            const codeRendered = await drawSpotifyCode(ctx, {
+                albumId: posterData.codeAlbumId,
+                playlistId: posterData.codePlaylistId,
+                backgroundColor: posterData.backgroundColor,
+                textColor: posterData.textColor,
+                x: 2020 - marginSide,
+                y: 3235,
+                width: 480,
+                height: 120,
+            });
+            if (forPreview) onImageReady(canvas.toDataURL('image/png'), codeRendered);
+            return canvas;
+    }, [posterData, onImageReady, onTitleSizeAdjust, customFont]);
 
-        generatePosterContent();
-    }, [generatePoster, posterData, onImageReady, onTitleSizeAdjust, customFont]);
+    useImperativeHandle(ref, () => ({
+        renderExport: async (outputWidth, outputHeight) =>
+            generatePosterContent(document.createElement('canvas'), outputWidth, outputHeight),
+    }), [generatePosterContent]);
+
+    useEffect(() => {
+        if (generatePoster) generatePosterContent(canvasRef.current, 2480, 3508, true);
+    }, [generatePoster, generatePosterContent]);
 
     return <canvas ref={canvasRef} width={2480} height={3508} style={{ display: 'none' }} />;
-};
+});
 
 export default CanvasPoster;

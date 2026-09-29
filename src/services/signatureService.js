@@ -36,7 +36,7 @@ async function getRealDirectUrl(fileNameOrUrl) {
 
     const directUrl = pages[pageId].imageinfo[0].url;
     return directUrl;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -64,13 +64,13 @@ async function searchWikimediaCommons(name) {
         const infoData = await infoRes.json();
         const pageId = Object.keys(infoData.query.pages)[0];
         return infoData.query.pages[pageId].imageinfo[0].url;
-      } catch (e) {
+      } catch {
         return null;
       }
     };
 
     return { svg: await getUrl(svgFile?.title), png: await getUrl(pngFile?.title) };
-  } catch (e) {
+  } catch {
     return { svg: null, png: null };
   }
 }
@@ -97,7 +97,8 @@ async function searchSpotifyIdByArtistName(artistName) {
     if (wikiData.results.bindings.length > 0) {
       return wikiData.results.bindings[0].spotifyId.value;
     }
-  } catch (e) {
+  } catch {
+    return null;
   }
 
   return null;
@@ -157,7 +158,8 @@ async function getSignatureBySpotifyId(spotifyId, fallbackName = null) {
         signatureUrl = directUrl || wikidataUrl;
       }
     }
-  } catch (e) {
+  } catch {
+    return null;
   }
 
   return signatureUrl ? { url: signatureUrl, spotifyId: resolvedSpotifyId } : null;

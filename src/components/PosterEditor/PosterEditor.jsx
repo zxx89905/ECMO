@@ -1,11 +1,10 @@
-/* eslint-disable react-hooks/rules-of-hooks */
 /* eslint-disable react/prop-types */
 import styled, { css, keyframes } from "styled-components";
-import { IoArrowBack } from "react-icons/io5";
+import { IoArrowBack, IoPrintOutline } from "react-icons/io5";
 import NormalInput from "./inputs/NormalInput";
 import DoubleInput from "./inputs/DoubleInput";
 import ColorInput from "./inputs/ColorInput";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from 'react-i18next';
 import ColorSelector from "./ColorSelector";
 import CheckInput from "./inputs/CheckInput";
@@ -17,6 +16,15 @@ import LoadingDiv from "../LoadingDiv";
 import { Palette } from "color-thief-react";
 import CanvasPoster from "./CanvasPoster";
 import CanvasPoster23 from "./CanvasPoster23";
+import ManualAlbumSearch from './ManualAlbumSearch';
+import SavedPlaylistImport from './SavedPlaylistImport';
+import PrintDialog from './PrintDialog';
+import { parseSpotifyAlbumId, parseSpotifyPlaylistId } from '../../utils/spotifyCode';
+import { albumFileName, imageExtension } from '../../utils/downloadName';
+import { getPrintPresets } from '../../utils/printPresets';
+import { encodeJpegWithDpi } from '../../utils/jpegPrint';
+import { encodeTiff } from '../../utils/tiff';
+import { getSpotifyAlbum } from '../../services/spotifyClient';
 
 const Container = styled.div`
     width: 80%;
@@ -166,8 +174,10 @@ const TrackFuncBtn = styled.button`
 const DivButtons = styled.div`
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
     margin-top: 15px;
-    margin-inline: -20px;
+    margin-inline: 0;
     justify-content: end;
 
     @media (max-width: 450px) {
@@ -186,8 +196,8 @@ const ButtonDiv = styled.div`
     border-radius: 10px;
     background-color: rgba(255, 255, 255, 0.05);
     padding: 7px 15px;
-    width: min-content;
-    margin-left: 15px;
+    width: auto;
+    white-space: nowrap;
     cursor: pointer;
     justify-content: center;
     align-items: center;
@@ -219,11 +229,16 @@ const ButtonDiv = styled.div`
 
 const ButtonText = styled.p`
     font-size: .85em;
-    margin-inline: 10px;
+    margin-inline: 7px;
     font-weight: bold;
+    white-space: nowrap;
 `
 
 const IconDownload = styled(IoMdDownload)`
+    font-size: 1.15em;
+`
+
+const IconPrint = styled(IoPrintOutline)`
     font-size: 1.15em;
 `
 
@@ -274,13 +289,26 @@ const ShortcutsInfo = styled.p`
     }
 `;
 
-function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeight = 3508, posterRatio = "a4" }) {
+function ApplyCoverPalette({ data, loading, cover, onReady }) {
+    useEffect(() => {
+        if (!loading) onReady(cover, data);
+    }, [data, loading, cover, onReady]);
+    return null;
+}
+
+function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = false, posterWidth = 2480, posterHeight = 3508, posterRatio = "a4" }) {
     const { t } = useTranslation();
     const previewRef = useRef(null);
+    const posterCanvasRef = useRef(null);
+    const localCoverUrlRef = useRef(null);
 
-    const [albumName, setAlbumName] = useState('');
-    const [artistsName, setArtistsName] = useState('');
-    const [titleSize, setTitleSize] = useState('200');
+    useEffect(() => () => {
+        if (localCoverUrlRef.current) URL.revokeObjectURL(localCoverUrlRef.current);
+    }, []);
+
+    const [albumName, setAlbumName] = useState(manual ? '专辑名称' : '');
+    const [artistsName, setArtistsName] = useState(manual ? '艺术家' : '');
+    const [titleSize, setTitleSize] = useState('180');
     const [artistsSize, setArtistsSize] = useState('110');
     const [tracksSize, setTracksSize] = useState('50');
     const [marginTop, setMarginTop] = useState('');
@@ -293,17 +321,22 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
     const [signatureHorizontalPosition, setSignatureHorizontalPosition] = useState(0);
     const [signatureVerticalPosition, setSignatureVerticalPosition] = useState(0);
 
-    const [backgroundColor, setbackgroundColor] = useState('#5900ff');
-    const [textColor, setTextColor] = useState('#ff9100');
+    const [backgroundColor, setbackgroundColor] = useState(manual ? '#1a1a1a' : '#5900ff');
+    const [textColor, setTextColor] = useState(manual ? '#ffffff' : '#ff9100');
     const [color1, setcolor1] = useState('#ff0000');
     const [color2, setcolor2] = useState('#00ff40');
     const [color3, setcolor3] = useState('#2600ff');
     const [useFade, setUseFade] = useState(true);
-    const [showTracklist, setShowTracklist] = useState(false);
+    const [showTracklist, setShowTracklist] = useState(manual);
     const [albumCover, setAlbumCover] = useState('');
     const [uncompressedAlbumCover, setUncompressedAlbumCover] = useState('');
     const [customFont, setCustomFont] = useState('');
     const [customFontFile, setCustomFontFile] = useState(null);
+    const [spotifyLink, setSpotifyLink] = useState('');
+    const [codeUnavailable, setCodeUnavailable] = useState(false);
+    const [fetchError, setFetchError] = useState('');
+    const codeAlbumId = manual ? parseSpotifyAlbumId(spotifyLink) : albumID;
+    const codePlaylistId = manual ? parseSpotifyPlaylistId(spotifyLink) : null;
 
     const [activeTab, setActiveTab] = useState('information');
 
@@ -335,8 +368,40 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
     const [runtime, setRuntime] = useState('');
 
     const [showColorSelector, setShowColorSelector] = useState(false);
-    const [colorInputPosition, setColorInputPosition] = useState(null);
     const [currentColorInput, setCurrentColorInput] = useState(null);
+    const [showPrintDialog, setShowPrintDialog] = useState(false);
+    const [exportName, setExportName] = useState('');
+    const [exportNameTouched, setExportNameTouched] = useState(false);
+    const [exportSize, setExportSize] = useState(posterRatio === '2-3' ? '8X12' : 'A4');
+    const [exportFormat, setExportFormat] = useState('tif');
+    const [exportBusy, setExportBusy] = useState(false);
+    const [exportError, setExportError] = useState('');
+    const [coverSourceWidth, setCoverSourceWidth] = useState(0);
+    const printPresets = getPrintPresets(posterRatio);
+    const selectedPrintPreset = printPresets.find((preset) => preset.label === exportSize) || printPresets[0];
+    const coverPrintPpi = coverSourceWidth
+        ? Math.round(coverSourceWidth / (selectedPrintPreset.widthMm
+            ? selectedPrintPreset.widthMm / 25.4
+            : selectedPrintPreset.widthInches))
+        : 0;
+
+    useEffect(() => {
+        if (!exportNameTouched) setExportName(albumName);
+    }, [albumName, exportNameTouched]);
+
+    useEffect(() => {
+        setExportSize(posterRatio === '2-3' ? '8X12' : 'A4');
+    }, [posterRatio]);
+
+    useEffect(() => {
+        const source = useUncompressed ? uncompressedAlbumCover : albumCover;
+        if (!source) { setCoverSourceWidth(0); return; }
+        const cover = new Image();
+        cover.onload = () => setCoverSourceWidth(cover.naturalWidth);
+        cover.onerror = () => setCoverSourceWidth(0);
+        cover.src = source;
+        return () => { cover.onload = null; cover.onerror = null; };
+    }, [albumCover, uncompressedAlbumCover, useUncompressed]);
 
     const [userAdjustedTitleSize, setUserAdjustedTitleSize] = useState(false);
     const [initialTitleSizeSet, setInitialTitleSizeSet] = useState(false);
@@ -390,6 +455,8 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
         color2,
         color3,
         albumID,
+        codeAlbumId,
+        codePlaylistId,
         spotifyArtistId,
         showArtistSignature,
         signatureScale,
@@ -401,91 +468,162 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
 
     const [image, setImage] = useState(null);
     const [generatePoster, setGeneratePoster] = useState(false);
-    const [infosLoaded, setInfosLoaded] = useState(false);
+    const [infosLoaded, setInfosLoaded] = useState(manual);
+    const [paletteReadyCover, setPaletteReadyCover] = useState('');
+
+    useEffect(() => {
+        if (infosLoaded) setGeneratePoster(true);
+    }, [posterRatio, infosLoaded]);
 
     const [spinApplyButton, setSpinApplyButton] = useState(false);
 
-    const handleImageReady = (imageUrl) => {
+    const handleImageReady = (imageUrl, codeRendered) => {
         setImage(imageUrl);
+        setCodeUnavailable(Boolean(codeAlbumId || codePlaylistId) && !codeRendered);
         setGeneratePoster(false);
         setSpinApplyButton(false);
     };
 
-    const handleApplyClick = () => {
+    const handleApplyClick = useCallback(() => {
         setUserAdjustedTitleSize(false);
-        requestAnimationFrame(() => {
-            setSpinApplyButton(true);
-            setGeneratePoster(true);
-            if (previewRef.current) {
-                window.scrollTo({
-                    top: previewRef.current.offsetTop - 150,
-                    behavior: 'smooth'
-                });
-            }
-        });
-    };
+        setSpinApplyButton(true);
+        setGeneratePoster(true);
+        if (previewRef.current) {
+            window.scrollTo({
+                top: previewRef.current.offsetTop - 150,
+                behavior: 'smooth'
+            });
+        }
+    }, []);
+
+    const handlePaletteReady = useCallback((cover, colors) => {
+        if (colors?.length) {
+            setbackgroundColor(colors[0]);
+            setTextColor(colors[1]);
+            setcolor1(colors[2]);
+            setcolor2(colors[3]);
+            setcolor3(colors[4]);
+        }
+        setPaletteReadyCover(cover);
+        handleApplyClick();
+    }, [handleApplyClick]);
 
     const handleFileChange = (file) => {
-        setAlbumCover(URL.createObjectURL(file));
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        if (localCoverUrlRef.current) URL.revokeObjectURL(localCoverUrlRef.current);
+        localCoverUrlRef.current = url;
+        setAlbumCover(url);
+        setImage(null);
         setUseUncompressed(false);
         setUncompressedAlbumCover('');
         setFileName(file.name);
     };
 
-    const handleDownloadClick = () => {
+    const handleManualAlbumSelect = (album) => {
+        if (localCoverUrlRef.current) URL.revokeObjectURL(localCoverUrlRef.current);
+        localCoverUrlRef.current = null;
+        setAlbumName(album.name);
+        setArtistsName(album.artist);
+        setAlbumCover(album.artwork || album.thumbnail);
+        setUncompressedAlbumCover('');
+        setUseUncompressed(false);
+        setFileName(album.source === 'spotify-saved-page' ? 'Spotify Playlist' : 'Apple Music');
+        setReleaseDate(album.releaseDate);
+        setRuntime(album.runtime);
+        setTracklist(album.tracklist);
+        setShowTracklist(Boolean(album.tracklist));
+        setSpotifyLink(album.spotifyLink || '');
+        setCodeUnavailable(false);
+        setTitleSize('180');
+        if (album.source === 'spotify-saved-page') {
+            setTracksSize(album.trackCount > 35 ? '26' : album.trackCount > 25 ? '30' : album.trackCount > 14 ? '40' : '50');
+        }
+        setInitialTitleSizeSet(false);
+        setUserAdjustedTitleSize(false);
+        setImage(null);
+        setGeneratePoster(true);
+    };
+
+    const handleDownloadClick = useCallback(() => {
         if (!image) return;
         const link = document.createElement('a');
         link.href = image;
-        link.download = `Posterfy - ${albumName}.png`;
+        link.download = albumFileName(albumName, 'png');
         link.click();
-    };
-    
-    const handleCoverDownloadClick = async () => {
-        if (useUncompressed) {
-            if (!uncompressedAlbumCover) return;
-            const blob = await (await fetch(await uncompressedAlbumCover)).blob();
-            const link = Object.assign(document.createElement('a'), {
-                href: URL.createObjectURL(blob),
-                download: `Posterfy - ${albumName} Uncompressed Cover.png`
-            });
+    }, [image, albumName]);
+
+    const handlePrintDownloadClick = useCallback(async () => {
+        if (!image || exportBusy || !posterCanvasRef.current) return;
+        setExportBusy(true);
+        setExportError('');
+        let canvas;
+        try {
+            canvas = await posterCanvasRef.current.renderExport(selectedPrintPreset.width, selectedPrintPreset.height);
+            const blob = exportFormat === 'tif'
+                ? await encodeTiff(canvas, selectedPrintPreset.ppi)
+                : await encodeJpegWithDpi(canvas, selectedPrintPreset.ppi);
+            const objectUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = objectUrl;
+            link.download = albumFileName(exportName.trim() || albumName, exportFormat, selectedPrintPreset.label);
             link.click();
-            URL.revokeObjectURL(link.href);
-        } else {
-            if (!albumCover) return;
-            const blob = await (await fetch(albumCover)).blob();
-            const link = Object.assign(document.createElement('a'), {
-                href: URL.createObjectURL(blob),
-                download: `Posterfy - ${albumName} Cover.png`
-            });
-            link.click();
-            URL.revokeObjectURL(link.href);
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+        } catch (error) {
+            console.error('Poster export failed:', error);
+            setExportError(t('ExportFailed'));
+        } finally {
+            if (canvas) { canvas.width = 0; canvas.height = 0; }
+            setExportBusy(false);
         }
+    }, [image, exportBusy, selectedPrintPreset, exportFormat, exportName, albumName, t]);
+
+    const handlePrintDialogClose = useCallback(() => {
+        if (!exportBusy) setShowPrintDialog(false);
+    }, [exportBusy]);
+
+    const handlePrintDialogOpen = () => {
+        setExportFormat('tif');
+        setExportError('');
+        setShowPrintDialog(true);
     };
 
-    function handleColorInputClick(e, colorInputName) {
-        const rect = e.target.getBoundingClientRect();
-        setColorInputPosition({
-            top: rect.top + window.scrollY,
-            left: rect.left + window.scrollX,
-        });
+    const handleCoverDownloadClick = async () => {
+        const coverUrl = useUncompressed ? uncompressedAlbumCover : albumCover;
+        if (!coverUrl) return;
+        const response = await fetch(coverUrl);
+        if (!response.ok) return;
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = albumFileName(albumName, imageExtension(blob.type), 'Cover');
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    };
+
+    function handleColorInputClick(colorInputName) {
         setCurrentColorInput(colorInputName);
         setShowColorSelector(true);
+        if (previewRef.current) {
+            window.scrollTo({ top: previewRef.current.offsetTop - 150, behavior: 'smooth' });
+        }
     }
 
-    function handleColorSelectorClose() {
+    const handleColorSelectorClose = useCallback(() => {
         setShowColorSelector(false);
-    };
+        setCurrentColorInput(null);
+    }, []);
 
-    async function getItunesUncompressedAlbumCover(searchQuery, country = "us") {
+    async function getItunesUncompressedAlbumCover(searchQuery, country = "us", signal) {
         try {
             let apiUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&country=${country}&entity=album&limit=1`;
-            let response = await fetch(apiUrl);
+            let response = await fetch(apiUrl, { signal });
             if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
     
             let data = await response.json();
             if (!data.results?.length) {
                 console.warn("No album data found.");
-                setUseUncompressed(false);
                 return '';
             }
     
@@ -510,39 +648,20 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
     }, [t]);
 
     useEffect(() => {
+        const controller = new AbortController();
         const fetchAlbumData = async () => {
             try {
-                const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-                const clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET;
-    
-                const tokenResponse = await fetch("https://accounts.spotify.com/api/token", {
-                    method: "POST",
-                    headers: {
-                        Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
-                        "Content-Type": "application/x-www-form-urlencoded",
-                    },
-                    body: new URLSearchParams({
-                        grant_type: "client_credentials",
-                    }),
-                });
-    
-                const tokenData = await tokenResponse.json();
-                const accessToken = tokenData.access_token;
-    
-                const albumResponse = await fetch(`https://api.spotify.com/v1/albums/${albumID}`, {
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                    },
-                });
-    
-                const albumData = await albumResponse.json();
+                const albumData = await getSpotifyAlbum(albumID, controller.signal);
+                if (controller.signal.aborted) return;
                 const formattedArtistsName = albumData.artists.map((artist) => artist.name).join(", ");
                 setAlbumName(albumData.name);
                 setArtistsName(formattedArtistsName);
-                setAlbumCover(albumData.images[0]?.url);
+                setAlbumCover(albumData.images?.[0]?.url || '');
                 setReleaseDate(albumData.release_date);
                 setSpotifyArtistId(albumData.artists[0]?.id);
-                setUncompressedAlbumCover(await getItunesUncompressedAlbumCover(albumData.name + " " + formattedArtistsName));
+                const highResCover = await getItunesUncompressedAlbumCover(albumData.name + " " + formattedArtistsName, 'us', controller.signal);
+                if (controller.signal.aborted) return;
+                setUncompressedAlbumCover(highResCover);
                 
                 const runtime = albumData.tracks.items.reduce((totalDuration, track) => totalDuration + track.duration_ms, 0);
                 const totalSeconds = Math.floor(runtime / 1000);
@@ -567,19 +686,23 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                 setInfosLoaded(true);          
     
             } catch (error) {
+                if (controller.signal.aborted) return;
                 console.error("Error trying to fetch album data:", error);
+                setFetchError('Spotify 专辑信息暂时无法加载');
             }
         };
     
         if (albumID) fetchAlbumData();
+        return () => controller.abort();
     }, [albumID]);
 
     useEffect(() => {
         const handleKeyDown = (event) => {
-            if (event.ctrl && event.key === 's') {
+            if (showPrintDialog) return;
+            if (event.ctrlKey && event.key === 's') {
                 event.preventDefault();
                 handleApplyClick();
-            } else if (event.ctrl && event.key === 'd') {
+            } else if (event.ctrlKey && event.key === 'd') {
                 event.preventDefault();
                 handleDownloadClick();
             }
@@ -589,41 +712,40 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [image, albumName, handleDownloadClick]);
+    }, [handleApplyClick, handleDownloadClick, showPrintDialog]);
 
     return (
         <>
             {!infosLoaded ? (
-                <LoadingDiv/>
+                fetchError ? (
+                    <div role="alert" style={{ textAlign: 'center', margin: '40px auto' }}>
+                        <p>{fetchError}。你可以使用手动模式继续制作。</p>
+                        <button onClick={onSwitchToManual} style={{ marginTop: 12, padding: '10px 16px', cursor: 'pointer' }}>切换到本地手动制作</button>
+                    </div>
+                ) : <LoadingDiv/>
             ) : (
                 <Container>
-                <Palette src={albumCover} crossOrigin="anonymous" format="hex" colorCount={5}>
-                    {({ data }) => {
-                        useEffect(() => {
-                            if (data && data.length > 0) {
-                                setbackgroundColor(data[0]);
-                                setTextColor(data[1]);
-                                setcolor1(data[2]);
-                                setcolor2(data[3]);
-                                setcolor3(data[4]);
-                                handleApplyClick();
-                            }
-                        }, [data]);
-                        return null;
-                    }}
-                </Palette>
-                    <DivBack onClick={handleClickBack}>
+                {albumCover && <Palette key={albumCover} src={albumCover} crossOrigin="anonymous" format="hex" colorCount={5}>
+                    {({ data, loading }) => <ApplyCoverPalette data={data} loading={loading}
+                        cover={albumCover} onReady={handlePaletteReady} />}
+                </Palette>}
+                    {manual && <>
+                        <SavedPlaylistImport onSelect={handleManualAlbumSelect} />
+                        <ManualAlbumSearch onSelect={handleManualAlbumSelect} />
+                    </>}
+                    {!manual && <DivBack onClick={handleClickBack}>
                         <ArrowBack/>
                         <TextBack>
                             {t('GoBack')}
                         </TextBack>
-                    </DivBack>
+                    </DivBack>}
                     <ContainerEditor>
                         {posterRatio === "2-3" ? (
                         <CanvasPoster23
+                            ref={posterCanvasRef}
                             onImageReady={handleImageReady}
                             posterData={posterData}
-                            generatePoster={generatePoster}
+                            generatePoster={generatePoster && (!albumCover || paletteReadyCover === albumCover)}
                             onTitleSizeAdjust={handleTitleSizeAdjust}
                             customFont={customFont}
                             width={posterWidth}
@@ -631,9 +753,10 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                         />
                         ) : (
                         <CanvasPoster
+                            ref={posterCanvasRef}
                             onImageReady={handleImageReady}
                             posterData={posterData}
-                            generatePoster={generatePoster}
+                            generatePoster={generatePoster && (!albumCover || paletteReadyCover === albumCover)}
                             onTitleSizeAdjust={handleTitleSizeAdjust}
                             customFont={customFont}
                             width={posterWidth}
@@ -646,6 +769,7 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                             <FakePoster ref={previewRef} />
                         )}
                         <EditorColumn>
+                            {!manual && codeUnavailable && <p role="alert" style={{ margin: '10px 30px' }}>Spotify 条形码服务暂时不可用；海报已生成，但未包含条形码。</p>}
                             <TabsContainer>
                                 <Tab 
                                     $active={activeTab === 'information'} 
@@ -724,27 +848,27 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                                     <ColorInput 
                                         title={t('EDITOR_BackgroundColor')} 
                                         value={backgroundColor} 
-                                        onClick={(e) => handleColorInputClick(e, 'backgroundColor')}
+                                        onClick={() => handleColorInputClick('backgroundColor')}
                                     />
                                     <ColorInput 
                                         title={t('EDITOR_TextColor')} 
                                         value={textColor} 
-                                        onClick={(e) => handleColorInputClick(e, 'textColor')}
+                                        onClick={() => handleColorInputClick('textColor')}
                                     />
                                     <ColorInput 
                                         title={`${t('EDITOR_Color')} 1`} 
                                         value={color1} 
-                                        onClick={(e) => handleColorInputClick(e, 'color1')}
+                                        onClick={() => handleColorInputClick('color1')}
                                     />
                                     <ColorInput 
                                         title={`${t('EDITOR_Color')} 2`} 
                                         value={color2} 
-                                        onClick={(e) => handleColorInputClick(e, 'color2')}
+                                        onClick={() => handleColorInputClick('color2')}
                                     />
                                     <ColorInput 
                                         title={`${t('EDITOR_Color')} 3`} 
                                         value={color3} 
-                                        onClick={(e) => handleColorInputClick(e, 'color3')}
+                                        onClick={() => handleColorInputClick('color3')}
                                     />
 
                                     <CheckInput
@@ -753,12 +877,12 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                                         onChange={(newValue) => setUseFade(newValue)}
                                         text={t('EDITOR_FadeText')}
                                     />
-                                    <CheckInput
+                                    {!manual && <CheckInput
                                         title={t('EDITOR_Uncompressed')}
                                         value={useUncompressed}
                                         onChange={(newValue) => setUseUncompressed(newValue)}
                                         text={t('EDITOR_UncompressedText')}
-                                    />
+                                    />}
                                     <CheckInput
                                         title={t('EDITOR_Tracklist')}
                                         value={showTracklist}
@@ -770,6 +894,22 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                                         onChange={handleFileChange}
                                         text={fileName}
                                     />
+                                    {manual && (
+                                        <>
+                                            <NormalInput
+                                                title="专辑或歌单链接 / URI"
+                                                value={spotifyLink}
+                                                onChange={(e) => setSpotifyLink(e.target.value)}
+                                            />
+                                            {((spotifyLink && !codeAlbumId && !codePlaylistId) || codeUnavailable) && (
+                                                <p style={{ gridColumn: '1 / -1', margin: '0 10px 10px', fontSize: '.85em' }}>
+                                                    {spotifyLink && !codeAlbumId && !codePlaylistId
+                                                        ? '请输入 Spotify 专辑或歌单链接，也可使用对应 URI。'
+                                                        : '条形码服务暂时不可用；海报已生成，但未包含条形码。'}
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
                                     <FontInput
                                         title={t('EDITOR_Font')}
                                         text={customFontFile?.name || t('EDITOR_DefaultFont')}
@@ -779,13 +919,13 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                                     {/* ========================== */}
                                     {/* ✅ 签名设置（放最底部） */}
                                     {/* ========================== */}
-                                    <CheckInput
+                                    {!manual && <CheckInput
                                         title="显示艺术家签名"
                                         value={showArtistSignature}
                                         onChange={setShowArtistSignature}
                                         text="显示签名"
-                                    />
-                                    {showArtistSignature && (
+                                    />}
+                                    {!manual && showArtistSignature && (
                                         <>
                                             <NormalInput
                                                 title="签名大小"
@@ -805,7 +945,7 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                                         </>
                                     )}
             
-                                    {showColorSelector && colorInputPosition && currentColorInput && (
+                                    {showColorSelector && currentColorInput && (
                                         <ColorSelector
                                             DefaultColor={currentColorInput === 'backgroundColor' ? backgroundColor : 
                                                         currentColorInput === 'textColor' ? textColor : 
@@ -813,6 +953,7 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                                                         currentColorInput === 'color2' ? color2 : color3}
                                             image={albumCover}
                                             predefinedColors={[color1, color2, color3, backgroundColor, textColor]}
+                                            anchorRef={previewRef}
                                             onDone={(selectedColor) => {
                                                 switch (currentColorInput) {
                                                     case 'backgroundColor':
@@ -833,9 +974,8 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                                                     default:
                                                         break;
                                                 }
-                                                setColorInputPosition(null);
+                                                handleApplyClick();
                                             }}
-                                            position={colorInputPosition}
                                             onClose={handleColorSelectorClose}
                                         />
                                     )}
@@ -866,6 +1006,10 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                                         {t('EDITOR_Download')}
                                     </ButtonText>
                                 </ButtonDiv>
+                                <ButtonDiv onClick={handlePrintDialogOpen}>
+                                    <IconPrint/>
+                                    <ButtonText>{t('PrintButton')}</ButtonText>
+                                </ButtonDiv>
                                 <ButtonDiv onClick={handleApplyClick}>
                                     <IconApply $spinning={spinApplyButton}/>
                                     <ButtonText>
@@ -878,6 +1022,23 @@ function PosterEditor({ albumID, handleClickBack, posterWidth = 2480, posterHeig
                             </ShortcutsInfo>
                         </EditorColumn>
                     </ContainerEditor>
+                    {showPrintDialog && <PrintDialog
+                        albumName={albumName}
+                        exportName={exportName}
+                        onNameChange={(value) => { setExportName(value); setExportNameTouched(true); }}
+                        printPresets={printPresets}
+                        selectedPreset={selectedPrintPreset}
+                        onSizeChange={setExportSize}
+                        format={exportFormat}
+                        onFormatChange={setExportFormat}
+                        coverPrintPpi={coverPrintPpi}
+                        fileName={albumFileName(exportName.trim() || albumName, exportFormat, selectedPrintPreset.label)}
+                        ready={Boolean(image)}
+                        busy={exportBusy}
+                        error={exportError}
+                        onDownload={handlePrintDownloadClick}
+                        onClose={handlePrintDialogClose}
+                    />}
                 </Container>
             )}
         </>

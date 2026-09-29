@@ -1,8 +1,9 @@
 /* eslint-disable react/prop-types */
-import { useRef, useEffect } from 'react';
+import { forwardRef, useCallback, useImperativeHandle, useRef, useEffect } from 'react';
 import { getSignatureBySpotifyId } from '../../services/signatureService';
+import { drawSpotifyCode } from '../../utils/spotifyCode';
 
-const CanvasPoster = ({
+const CanvasPoster = forwardRef(function CanvasPoster({
     onImageReady,
     posterData,
     generatePoster,
@@ -10,15 +11,14 @@ const CanvasPoster = ({
     customFont,
     width = 2700,
     height = 4050,
-}) => {
+}, ref) {
     const canvasRef = useRef(null);
 
-    useEffect(() => {
-        const generatePosterContent = async () => {
-            if (!generatePoster) return;
-
-            const canvas = canvasRef.current;
+    const generatePosterContent = useCallback(async (canvas, outputWidth = width, outputHeight = height, forPreview = false) => {
+            canvas.width = outputWidth;
+            canvas.height = outputHeight;
             const ctx = canvas.getContext('2d');
+            ctx.setTransform(outputWidth / width, 0, 0, outputHeight / height, 0, 0);
             posterData.marginSide = parseInt(posterData.marginSide) || 0;
             posterData.marginTop = parseInt(posterData.marginTop) || 0;
             posterData.marginCover = parseInt(posterData.marginCover) || 0;
@@ -77,9 +77,9 @@ const CanvasPoster = ({
             };
 
             const loadCover = async (url) => {
+                if (!url) return;
                 const image = new Image();
                 image.crossOrigin = "anonymous";
-                image.src = url;
                 return new Promise((resolve) => {
                     image.onload = () => {
                         ctx.drawImage(
@@ -95,15 +95,17 @@ const CanvasPoster = ({
                             verticalFade.addColorStop(0.5, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0)`);
                             verticalFade.addColorStop(0.8, posterData.backgroundColor);
                             ctx.fillStyle = verticalFade;
-                            ctx.fillRect(0, 0, canvas.width, Math.round(height * 0.71));
+                            ctx.fillRect(0, 0, width, Math.round(height * 0.71));
                         }
                         resolve();
                     };
+                    image.onerror = resolve;
+                    image.src = url;
                 });
             };
 
             const drawAlbumInfos = async () => {
-                let titleFontSize = posterData.titleSize ? parseInt(posterData.titleSize) : Math.round(width * 0.093);
+                let titleFontSize = posterData.titleSize ? parseInt(posterData.titleSize, 10) : 180;
                 const fontFamily = customFont || 'Montserrat';
                 if (!posterData.userAdjustedTitleSize && !posterData.initialTitleSizeSet) {
                     ctx.font = `bold ${titleFontSize}px ${fontFamily}`;
@@ -114,7 +116,7 @@ const CanvasPoster = ({
                         ctx.font = `bold ${titleFontSize}px ${fontFamily}`;
                         titleWidth = ctx.measureText(posterData.albumName).width;
                     }
-                    onTitleSizeAdjust(titleFontSize, true);
+                    if (forPreview) onTitleSizeAdjust(titleFontSize, true);
                 } else {
                     ctx.font = `bold ${titleFontSize}px ${fontFamily}`;
                 }
@@ -209,52 +211,6 @@ const CanvasPoster = ({
                 return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
             };
 
-            const getContrast = (rgb) => {
-                const luminance = (c) => {
-                    const val = c / 255;
-                    return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
-                };
-                const lum = 0.2126 * luminance(rgb.r) + 0.7152 * luminance(rgb.g) + 0.0722 * luminance(rgb.b);
-                return lum > 0.179 ? "black" : "white";
-            };
-
-            const scannable = async () => {
-                const rgb = hexToRgb(posterData.backgroundColor);
-                const contrastColor = getContrast(rgb);
-                const targetColor = posterData.textColor;
-                const svgUrl = `https://scannables.scdn.co/uri/plain/svg/${posterData.backgroundColor.replace('#', '')}/${contrastColor}/640/spotify:album:${posterData.albumID}`;
-                
-                const response = await fetch(svgUrl);
-                let svgText = await response.text();
-                
-                if(contrastColor === 'black'){
-                    svgText = svgText.replace(/fill="#000000"/g, `fill="${targetColor}"`);
-                } else{
-                    svgText = svgText.replace(/fill="#ffffff"/g, `fill="${targetColor}"`);
-                }
-                
-                const svgBlob = new Blob([svgText], { type: "image/svg+xml" });
-                const updatedSvgUrl = URL.createObjectURL(svgBlob);
-            
-                return new Promise((resolve) => {
-                    const image = new Image();
-                    image.src = updatedSvgUrl;
-            
-                    image.onload = function () {
-                        ctx.drawImage(
-                            image,
-                            Math.round(width * 0.792) - posterData.marginSide,
-                            Math.round(height * 0.916),
-                            Math.round(width * 0.214),
-                            Math.round(height * 0.035)
-                        );
-                        const imageUrl = canvas.toDataURL('image/png');
-                        onImageReady(imageUrl);
-                        resolve();
-                    };
-                });
-            };
-
             const drawBackground = async () => {
                 ctx.clearRect(0, 0, width, height);
                 ctx.fillStyle = posterData.backgroundColor;
@@ -263,7 +219,7 @@ const CanvasPoster = ({
 
             await drawBackground();
             if (posterData.useUncompressed) {
-                await loadCover(await posterData.uncompressedAlbumCover);
+                await loadCover(posterData.uncompressedAlbumCover);
             } else {
                 await loadCover(posterData.albumCover);
             }
@@ -272,13 +228,30 @@ const CanvasPoster = ({
                 await drawTracklist();
             }
             await drawArtistSignature();
-            await scannable();
-        };
+            const codeRendered = await drawSpotifyCode(ctx, {
+                albumId: posterData.codeAlbumId,
+                playlistId: posterData.codePlaylistId,
+                backgroundColor: posterData.backgroundColor,
+                textColor: posterData.textColor,
+                x: Math.round(width * 0.792) - posterData.marginSide,
+                y: Math.round(height * 0.916),
+                width: Math.round(width * 0.214),
+                height: Math.round(height * 0.035),
+            });
+            if (forPreview) onImageReady(canvas.toDataURL('image/png'), codeRendered);
+            return canvas;
+    }, [posterData, onImageReady, onTitleSizeAdjust, customFont, width, height]);
 
-        generatePosterContent();
-    }, [generatePoster, posterData, onImageReady, width, height, customFont, onTitleSizeAdjust]);
+    useImperativeHandle(ref, () => ({
+        renderExport: async (outputWidth, outputHeight) =>
+            generatePosterContent(document.createElement('canvas'), outputWidth, outputHeight),
+    }), [generatePosterContent]);
+
+    useEffect(() => {
+        if (generatePoster) generatePosterContent(canvasRef.current, width, height, true);
+    }, [generatePoster, generatePosterContent, width, height]);
 
     return <canvas ref={canvasRef} width={width} height={height} style={{ display: 'none' }} />;
-};
+});
 
 export default CanvasPoster;

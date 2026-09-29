@@ -1,8 +1,9 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import Album from "./Album";
 import LoadingDiv from "./LoadingDiv";
+import { searchSpotifyAlbums } from '../services/spotifyClient';
 
 const Container = styled.div`
     width: 81%;
@@ -82,9 +83,8 @@ const PaginationContainer = styled.div`
                 transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 `;
 
-function Grid({ query, onclick }) {
+function Grid({ query, onclick, onApiError }) {
     const [albums, setAlbums] = useState([]);
-    const [token, setToken] = useState('');
     const [offset, setOffset] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -92,171 +92,104 @@ function Grid({ query, onclick }) {
     const [previousAlbumsCount, setPreviousAlbumsCount] = useState(0);
     const [showButton, setShowButton] = useState(false);
     const limit = 10;
+    const revealTimer = useRef(null);
+    const loadMoreController = useRef(null);
 
     useEffect(() => {
-        const fetchAccessToken = async () => {
-            const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-            const clientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET;
-
-            const response = await fetch('https://accounts.spotify.com/api/token', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`
-                },
-                body: 'grant_type=client_credentials'
-            });
-
-            const data = await response.json();
-            setToken(data.access_token);
-        };
-
-        fetchAccessToken();
-    }, []);
-
-    useEffect(() => {
+        loadMoreController.current?.abort();
+        clearTimeout(revealTimer.current);
         setAlbums([]);
         setOffset(0);
         setHasMore(true);
         setPreviousAlbumsCount(0);
         setShowButton(false);
+        setLoadingMore(false);
     }, [query]);
 
+    useEffect(() => () => {
+        loadMoreController.current?.abort();
+        clearTimeout(revealTimer.current);
+    }, []);
+
     useEffect(() => {
-        const fetchAlbums = async (isLoadMore = false) => {
-            if (!token) return;
-            
-            if (!isLoadMore) {
-                setLoading(true);
-            } else {
-                setLoadingMore(true);
-            }
-    
+        const controller = new AbortController();
+        const fetchAlbums = async () => {
+            setLoading(true);
             try {
-                let response;
-                const currentOffset = isLoadMore ? offset : 0;
-                
-                if (query) {
-                    response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=album&limit=${limit}&offset=${currentOffset}`, {
-                        headers: {
-                            Authorization: `Bearer ${token}`
-                        }
-                    });
-                } else {
-                    const year = new Date().getFullYear();
-                    response = await fetch(`https://api.spotify.com/v1/search?q=tag%3Anew+year%3A${year}&type=album&limit=${limit}&offset=${currentOffset}`, {
-                        headers: {
-                            Authorization: `Bearer ${token}`
-                        }
-                    });
-                }
-    
-                if (!response.ok) {
-                    const errorMessage = await response.text();
-                    throw new Error(`Erro na API: ${errorMessage}`);
-                }
-                
-                const data = await response.json();
-                const albumsData = (data.albums?.items || []).filter(album => album !== null && album !== undefined);
-                
-                const newAlbums = albumsData.map(album => ({
+                const data = await searchSpotifyAlbums(query, limit, 0, controller.signal);
+                if (controller.signal.aborted) return;
+                onApiError?.('');
+                const newAlbums = (data.albums?.items || []).filter(Boolean).map(album => ({
                     id: album.id,
                     title: album.name,
                     artist: album.artists?.map(artist => artist.name).join(', '),
-                    cover: album.images[0]?.url
+                    cover: album.images?.[0]?.url
                 }));
-
-                if (isLoadMore) {
-                    setShowButton(false);
-                    setPreviousAlbumsCount(albums.length);
-                    setAlbums(prevAlbums => [...prevAlbums, ...newAlbums]);
-                } else {
-                    setShowButton(false);
-                    setPreviousAlbumsCount(0);
-                    setAlbums(newAlbums);
-                }
-
-                const lastAlbumDelay = (newAlbums.length - 1) * 80;
-                const animationDuration = 800;
-                setTimeout(() => {
-                    setShowButton(true);
-                }, lastAlbumDelay + animationDuration);
-
+                setShowButton(false);
+                setPreviousAlbumsCount(0);
+                setAlbums(newAlbums);
+                clearTimeout(revealTimer.current);
+                revealTimer.current = setTimeout(() => setShowButton(true), Math.max(0, newAlbums.length - 1) * 80 + 800);
                 const totalResults = data.albums?.total || 0;
-                const currentTotal = isLoadMore ? albums.length + newAlbums.length : newAlbums.length;
-                setHasMore(currentTotal < totalResults && newAlbums.length === limit);
-                
+                setHasMore(newAlbums.length < totalResults && newAlbums.length === limit);
             } catch (err) {
+                if (controller.signal.aborted) return;
                 console.error(err);
+                onApiError?.(err.message === 'Missing Spotify credentials' || err.message.startsWith('Spotify token:')
+                    ? 'Spotify 授权暂时不可用' : 'Spotify 专辑列表暂时无法加载');
             } finally {
-                setLoading(false);
-                setLoadingMore(false);
+                if (!controller.signal.aborted) setLoading(false);
             }
         };
-    
-        if (token && (albums.length === 0 || offset === 0)) {
-            fetchAlbums(false);
-        }
-    }, [query, token]);
+        fetchAlbums();
+        return () => {
+            controller.abort();
+            clearTimeout(revealTimer.current);
+        };
+    }, [query, onApiError]);
 
     const loadMoreAlbums = async () => {
-        if (!token || !hasMore || loadingMore) return;
-        
+        if (!hasMore || loadingMore) return;
+
         const newOffset = offset + limit;
-        setOffset(newOffset);
-        
+        const controller = new AbortController();
+        loadMoreController.current = controller;
         try {
             setLoadingMore(true);
-            let response;
-            
-            if (query) {
-                response = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=album&limit=${limit}&offset=${newOffset}`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
-            } else {
-                const year = new Date().getFullYear();
-                response = await fetch(`https://api.spotify.com/v1/search?q=tag%3Anew+year%3A${year}&type=album&limit=${limit}&offset=${newOffset}`, {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
-            }
-
-            if (!response.ok) {
-                const errorMessage = await response.text();
-                throw new Error(`Erro na API: ${errorMessage}`);
-            }
-            
-            const data = await response.json();
+            const data = await searchSpotifyAlbums(query, limit, newOffset, controller.signal);
+            if (controller.signal.aborted) return;
+            onApiError?.('');
             const albumsData = (data.albums?.items || []).filter(album => album !== null && album !== undefined);
             
             const newAlbums = albumsData.map(album => ({
                 id: album.id,
                 title: album.name,
                 artist: album.artists?.map(artist => artist.name).join(', '),
-                cover: album.images[0]?.url
+                cover: album.images?.[0]?.url
             }));
 
             setShowButton(false);
             setPreviousAlbumsCount(albums.length);
             setAlbums(prevAlbums => [...prevAlbums, ...newAlbums]);
+            setOffset(newOffset);
 
             const lastAlbumDelay = (newAlbums.length - 1) * 80;
             const animationDuration = 800;
-            setTimeout(() => {
+            clearTimeout(revealTimer.current);
+            revealTimer.current = setTimeout(() => {
                 setShowButton(true);
-            }, lastAlbumDelay + animationDuration);
+            }, Math.max(0, lastAlbumDelay) + animationDuration);
 
             const totalResults = data.albums?.total || 0;
             const currentTotal = albums.length + newAlbums.length;
             setHasMore(currentTotal < totalResults && newAlbums.length === limit);
             
         } catch (err) {
+            if (controller.signal.aborted) return;
             console.error(err);
+            onApiError?.('Spotify 后续结果暂时无法加载');
         } finally {
-            setLoadingMore(false);
+            if (!controller.signal.aborted) setLoadingMore(false);
         }
     };
     

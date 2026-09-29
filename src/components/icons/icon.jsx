@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-function SvgComponent({ width, height, fill }) {
+function SvgComponent({ width, height }) {
     return (
         <svg
             width={width}

@@ -11,6 +11,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   overflow-x: hidden;
+  background-color: #121212;
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
@@ -27,27 +28,6 @@ body::before {
   background-color: rgba(0, 0, 0, 0.3); /* 统一遮罩，增强文字可读性 */
   z-index: -1;
   transition: background-color 0.5s ease;
-}
-
-/* 主题定义：每个主题对应一张背景图 */
-.theme-dark {
-  background-image: url('/黑色.png');
-}
-
-.theme-rose {
-  background-image: url('/日漫.png');
-}
-
-.theme-fy {
-  background-image: url('/蓝色.png');
-}
-
-.theme-carmesin {
-  background-image: url('/动漫.png');
-}
-
-.theme-brown {
-  background-image: url('/雷电.png');
 }
 
 /* 通用样式 */

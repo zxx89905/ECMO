@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import styled from "styled-components";
-import React, { useRef } from "react";
+import { useRef } from "react";
 import { FaFont } from "react-icons/fa6";
 
 const Container = styled.div`

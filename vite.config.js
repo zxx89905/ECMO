@@ -4,5 +4,5 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/ZJT/' // 新仓库名，前后都要斜杠
+  base: '/ECMO/'  // 👈 必须是你的 GitHub 仓库名！
 })

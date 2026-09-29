@@ -1,9 +1,8 @@
 /* eslint-disable react/prop-types */
 import styled from "styled-components";
-import React, { useRef } from "react";
 import { FaFile } from "react-icons/fa6";
 
-const Container = styled.div`
+const Container = styled.label`
     display: flex;
     flex-direction: column;
     margin: 10px;
@@ -18,6 +17,7 @@ const Title = styled.p`
 `;
 
 const InputBox = styled.div`
+    position: relative;
     font-size: 0.85em;
     background-color: rgba(255, 255, 255, 0.05);
     border: none;
@@ -30,20 +30,12 @@ const InputBox = styled.div`
 `;
 
 const Input = styled.input`
-    appearance: none;
-    width: 16px;
-    height: 16px;
-    margin-left: 10px;
-    border-radius: 4px;
-    background-color: rgba(255, 255, 255, 0.1);
-    outline: none;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
     cursor: pointer;
-    transition: background-color 0.3s;
-    display: none;
-
-    &:checked {
-        background-color: var(--PosterfyGreen);
-    }
 `;
 
 // ✅ 修复：active → $active
@@ -69,27 +61,23 @@ const IconFile = styled(FaFile)`
 `
 
 function FileInput({ title, text, onChange }) {
-    const fileInputRef = useRef();
-
-    const handleToggle = () => {
-        fileInputRef.current.click();
-    };
-
     const handleChange = (e) => {
         const file = e.target.files[0];
-        text = file.name
-        if (file) onChange(file);
+        if (file) {
+            onChange(file);
+            e.target.value = '';
+        }
     };
 
     return (
-        <Container onClick={handleToggle}>
+        <Container>
             <Title>{title}</Title>
             <InputBox>
                 <IconFile />
                 <Input
-                    ref={fileInputRef}
                     type="file"
-                    accept="image/png, image/jpg, image/jpeg"
+                    accept="image/*"
+                    aria-label={title}
                     onChange={handleChange}
                 />
                 {/* ✅ 修复：active → $active */}

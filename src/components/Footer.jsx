@@ -1,7 +1,7 @@
 import styled, { keyframes } from "styled-components"
 import { useTranslation } from "react-i18next"
 import Icon from "./icons/icon"
-import { FaGithub, FaHeart, FaPalette, FaMoon, FaSun, FaLeaf, FaFire, FaWater } from "react-icons/fa"
+import { FaGithub, FaPalette, FaMoon, FaSun, FaLeaf, FaFire, FaWater } from "react-icons/fa"
 import { useEffect, useState } from "react"
 
 const float = keyframes`
@@ -185,23 +185,6 @@ const CreditText = styled.div`
   }
 `
 
-const CopyrightText = styled.div`
-  margin-top: 20px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85em;
-  color: rgba(255, 255, 255, 0.6);
-  
-  svg {
-    color: rgba(255, 255, 255, 0.6);
-  }
-  
-  @media (max-width: 768px) {
-    justify-content: center;
-  }
-`
-
 const ThemeSection = styled.div`
   display: flex;
   flex-direction: column;
@@ -240,8 +223,34 @@ const ThemeCards = styled.div`
   flex-wrap: wrap;
   gap: 10px;
   width: 100%;
-  max-width: 400px;
-  justify-content: center;
+  max-width: 470px;
+  justify-content: flex-start;
+`
+
+const SolidColorControl = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: white;
+  font-size: 0.85em;
+
+  input[type='color'] {
+    width: 42px;
+    height: 32px;
+    padding: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  input[type='text'] {
+    width: 84px;
+    padding: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+  }
 `
 
 // ✅ 修复：把 active 改成 $active
@@ -249,6 +258,7 @@ const ThemeCard = styled.button`
   background-color: ${(props) => props.color};
   border: none;
   border-radius: 8px;
+  flex: 0 0 70px;
   width: 70px;
   height: 70px;
   cursor: pointer;
@@ -294,6 +304,7 @@ const ThemeCard = styled.button`
   }
   
   @media (max-width: 480px) {
+    flex-basis: 60px;
     width: 60px;
     height: 60px;
   }
@@ -350,28 +361,45 @@ const GithubLink = styled.a`
   }
 `
 
+const themeImages = {
+  'theme-dark': '黑色.webp',
+  'theme-rose': '日漫.webp',
+  'theme-fy': '蓝色.webp',
+  'theme-carmesin': '动漫.webp',
+  'theme-brown': '雷电.webp',
+}
+
 function Footer() {
   const { t } = useTranslation()
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "theme-dark")
+  const [solidColor, setSolidColor] = useState(() => {
+    const saved = localStorage.getItem('solid-background-color')
+    return /^#[0-9a-f]{6}$/i.test(saved || '') ? saved : '#181818'
+  })
+  const [solidColorText, setSolidColorText] = useState(solidColor)
 
   useEffect(() => {
     document.body.className = theme
+    document.body.style.backgroundImage = theme === 'theme-solid'
+      ? 'none'
+      : `url("${import.meta.env.BASE_URL}${themeImages[theme] || themeImages['theme-dark']}")`
+    document.body.style.backgroundColor = theme === 'theme-solid' ? solidColor : '#121212'
     localStorage.setItem("theme", theme)
-  }, [theme])
+    localStorage.setItem('solid-background-color', solidColor)
+  }, [theme, solidColor])
 
   const handleThemeChange = (newTheme) => {
     setTheme(newTheme)
   }
 
   const themes = [
+    { id: "theme-solid", name: "Solid", color: solidColor, icon: <FaPalette /> },
     { id: "theme-dark", name: "Dark", color: "#070815", icon: <FaMoon /> },
     { id: "theme-fy", name: "Midnight", color: "#151515", icon: <FaSun /> },
     { id: "theme-rose", name: "Rose", color: "#232136", icon: <FaLeaf /> },
     { id: "theme-carmesin", name: "Crimson", color: "#1f0c19", icon: <FaFire /> },
     { id: "theme-brown", name: "Earth", color: "#1e1516", icon: <FaWater /> },
   ]
-
-  const currentYear = new Date().getFullYear()
 
   return (
     <Container>
@@ -393,9 +421,6 @@ function Footer() {
             </div>
           </CreditText>
 
-          <CopyrightText>
-            <FaHeart /> © {currentYear} Posterfy. {t("AllRights", "All rights reserved.")}
-          </CopyrightText>
         </CreditsSection>
 
         <ThemeSection>
@@ -418,10 +443,36 @@ function Footer() {
               </ThemeCard>
             ))}
           </ThemeCards>
+          {theme === 'theme-solid' && (
+            <SolidColorControl>
+              {t('SolidBackgroundColor', 'Background color')}
+              <input
+                type="color"
+                value={solidColor}
+                onChange={(event) => {
+                  setSolidColor(event.target.value)
+                  setSolidColorText(event.target.value)
+                }}
+                aria-label={t('SolidBackgroundColor', 'Background color')}
+              />
+              <input
+                type="text"
+                value={solidColorText}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setSolidColorText(value)
+                  if (/^#[0-9a-f]{6}$/i.test(value)) setSolidColor(value)
+                }}
+                onBlur={() => setSolidColorText(solidColor)}
+                aria-label={t('SolidBackgroundHex', 'Background HEX color')}
+                maxLength={7}
+              />
+            </SolidColorControl>
+          )}
         </ThemeSection>
 
         <SocialSection>
-          <GithubLink href="https://github.com/zxx89905/ZJT" target="blank">
+          <GithubLink href="https://github.com/zxx89905/ECMO" target="blank">
             <FaGithub /> {t("ViewGitHub", "GitHub")}
           </GithubLink>
         </SocialSection>

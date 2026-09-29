@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>鹈鹕骑自行车 · 骑慢一点，风景多一点</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #F8F3E7;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  svg {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+  }
+  #eye-entry { cursor: pointer; }
+  #eye-entry:focus-visible { outline: none; }
+  #eye-entry .focus-ring { opacity: 0; pointer-events: none; }
+  #eye-entry:focus-visible .focus-ring { opacity: 1; }
+</style>
+</head>
+<body>
+
+<svg viewBox="0 0 1000 900" xmlns="http://www.w3.org/2000/svg" role="img"
+     aria-label="一只鹈鹕骑着青色的自行车，缓缓前行">
+
+  <defs>
+    <!--
+      鹈鹕本体：身体 + 脖子 + 头，合成 **一条连续轮廓**（不是几何体拼贴）。
+      背线从圆润的臀部上行 → 收到脖子 → 张开成头 → 再从喉咙收回胸口。
+      尾巴另做一片羽毛叠在身体上，避免轮廓被削出一个尖角。
+    -->
+    <g id="pelicanBase">
+    <path d="
+      M 340 352
+      C 380 334, 420 330, 452 300
+      C 462 288, 460 268, 460 258
+      C 460 226, 478 202, 512 194
+      C 542 186, 576 190, 594 208
+      C 606 218, 612 230, 612 242
+      C 618 258, 616 274, 604 288
+      C 578 296, 552 300, 540 306
+      C 532 326, 530 342, 536 358
+      C 546 396, 546 432, 532 456
+      C 516 480, 480 492, 446 486
+      C 402 478, 360 470, 336 462
+      C 312 454, 298 440, 300 420
+      C 302 392, 318 366, 340 352
+      Z"/>
+
+      <!-- 尾羽：叠在臀部，向后下方伸出一片桨状短尾。
+           根部要宽（约 40px）、末端要圆钝，收成尖角就会读成刺。 -->
+      <path d="
+        M 336 370
+        C 304 372, 278 382, 264 396
+        C 254 408, 260 424, 274 426
+        C 296 428, 324 418, 336 404
+        Z"/>
+    </g>
+
+    <!-- 折叠的翅膀：肩端圆钝、后缘甩出三片羽毛尖。
+         要点是外形不能是椭圆——椭圆 + 内部放射线一定会读成树叶。 -->
+    <path id="wing" d="
+      M 470 376
+      C 440 380, 408 390, 386 404
+      C 374 412, 366 420, 372 428
+      C 364 436, 368 446, 380 445
+      C 378 454, 388 462, 400 458
+      C 416 452, 434 434, 448 412
+      C 464 388, 478 384, 470 376
+      Z"/>
+
+    <!-- 翅臂：从肩到腕有明显锥度的肢体，末端手掌搭在车把上 -->
+    <path id="armShape" d="
+      M 456 354
+      C 512 386, 558 446, 582 500
+      C 588 514, 608 520, 614 508
+      C 620 496, 610 486, 598 490
+      C 586 440, 544 390, 500 364
+      Z"/>
+
+    <!-- 喙：上颚厚实、末端带小钩；喉囊挂在上颚下缘。两者的公共边是同一条曲线 -->
+    <path id="beakUpper" d="
+      M 612 242
+      C 688 246, 750 266, 790 298
+      C 796 306, 792 314, 782 314
+      C 736 298, 678 290, 604 288
+      C 616 274, 618 258, 612 242
+      Z"/>
+    <path id="beakPouch" d="
+      M 604 288
+      C 678 290, 736 298, 782 314
+      C 768 374, 692 414, 626 380
+      C 596 352, 592 316, 604 288
+      Z"/>
+    <path id="beakSeam" d="M 604 288 C 678 290, 736 298, 782 314"/>
+
+    <!-- 带蹼的脚 -->
+    <path id="foot" d="M -18 -7 Q -25 0 -18 8 L 14 9 Q 26 4 20 -4 Q 13 -11 0 -9 Z"/>
+
+    <!-- 辐条 -->
+    <path id="spokesR" d="M300 665L404 665 M300 665L390.1 717 M300 665L352 755.1
+                           M300 665L300 769 M300 665L248 755.1 M300 665L209.9 717
+                           M300 665L196 665 M300 665L209.9 613 M300 665L248 574.9
+                           M300 665L300 561 M300 665L352 574.9 M300 665L390.1 613"/>
+    <path id="spokesF" d="M720 665L824 665 M720 665L810.1 717 M720 665L772 755.1
+                           M720 665L720 769 M720 665L668 755.1 M720 665L629.9 717
+                           M720 665L616 665 M720 665L629.9 613 M720 665L668 574.9
+                           M720 665L720 561 M720 665L772 574.9 M720 665L810.1 613"/>
+
+    <!-- 挡泥板 -->
+    <path id="fenderR" d="M 176 620 A 132 132 0 0 1 430 688"/>
+    <path id="fenderF" d="M 588 665 A 132 132 0 1 1 844 710"/>
+
+    <!-- 车架 -->
+    <path id="framePath" d="M 300 665 L 500 665
+                            M 300 665 L 434 520
+                            M 500 665 L 430 515
+                            M 500 665 L 708 586
+                            M 440 533 L 686 540
+                            M 686 543 L 714 600
+                            M 714 600 L 720 665
+                            M 690 548 L 674 506
+                            M 674 506 C 658 490 632 488 622 502 L 612 518"/>
+    <path id="barGrip" d="M 620 512 L 612 522"/>
+
+    <!-- 地面装饰（一格 500 宽，首尾无缝相接） -->
+    <g id="groundTile">
+      <rect x="40"  y="812" width="54" height="7" rx="3.5" fill="#DED4BA"/>
+      <rect x="190" y="830" width="34" height="7" rx="3.5" fill="#DED4BA"/>
+      <rect x="300" y="806" width="62" height="7" rx="3.5" fill="#DED4BA"/>
+      <rect x="430" y="826" width="40" height="7" rx="3.5" fill="#DED4BA"/>
+      <circle cx="120" cy="842" r="5" fill="#DED4BA"/>
+      <circle cx="380" cy="848" r="4" fill="#DED4BA"/>
+      <circle cx="250" cy="858" r="6" fill="#DED4BA"/>
+    </g>
+
+    <!-- 云 -->
+    <g id="cloud">
+      <circle cx="0"  cy="0"   r="24"/>
+      <circle cx="32" cy="-12" r="33"/>
+      <circle cx="72" cy="2"   r="23"/>
+      <rect x="-6" y="-2" width="84" height="24" rx="12"/>
+    </g>
+    <g id="cloudSm" transform="scale(0.78)">
+      <circle cx="0"  cy="0"   r="24"/>
+      <circle cx="32" cy="-12" r="33"/>
+      <circle cx="72" cy="2"   r="23"/>
+      <rect x="-6" y="-2" width="84" height="24" rx="12"/>
+    </g>
+  </defs>
+
+  <!-- ================= 背景 ================= -->
+  <rect x="-3000" y="-3000" width="6000" height="6000" fill="#F8F3E7"/>
+
+  <g id="sky" opacity="0.7" fill="#FFFFFF">
+    <use href="#cloud"   x="150"  y="-820"/>
+    <use href="#cloudSm" x="850"  y="-920"/>
+    <use href="#cloudSm" x="600"  y="-660"/>
+    <use href="#cloud"   x="300"  y="-430"/>
+    <use href="#cloudSm" x="900"  y="-270"/>
+    <use href="#cloudSm" x="-980" y="-680"/>
+    <use href="#cloud"   x="-420" y="-340"/>
+    <use href="#cloudSm" x="220"  y="-650"/>
+    <use href="#cloud"   x="760"  y="-300"/>
+    <use href="#cloudSm" x="1410" y="-610"/>
+    <use href="#cloud"   x="-790" y="252"/>
+    <use href="#cloudSm" x="-470" y="208"/>
+    <use href="#cloud"   x="-200" y="262"/>
+    <use href="#cloud"   x="110"  y="252"/>
+    <use href="#cloudSm" x="430"  y="208"/>
+    <use href="#cloud"   x="700"  y="262"/>
+    <use href="#cloud"   x="1010" y="252"/>
+    <use href="#cloudSm" x="1330" y="208"/>
+    <use href="#cloud"   x="1600" y="262"/>
+    <use href="#cloud"   x="1910" y="252"/>
+    <use href="#cloudSm" x="2230" y="208"/>
+  </g>
+
+  <rect x="-3000" y="790" width="6000" height="3000" fill="#EFE7D3"/>
+  <ellipse cx="300" cy="796" rx="128" ry="11" fill="#E2D9C0"/>
+  <ellipse cx="720" cy="796" rx="128" ry="11" fill="#E2D9C0"/>
+  <line x1="-3000" y1="790" x2="3000" y2="790" stroke="#DCD2B8" stroke-width="3"/>
+
+  <g id="groundScroll">
+    <use href="#groundTile" x="-2000"/>
+    <use href="#groundTile" x="-1500"/>
+    <use href="#groundTile" x="-1000"/>
+    <use href="#groundTile" x="-500"/>
+    <use href="#groundTile" x="0"/>
+    <use href="#groundTile" x="500"/>
+    <use href="#groundTile" x="1000"/>
+    <use href="#groundTile" x="1500"/>
+    <use href="#groundTile" x="2000"/>
+    <use href="#groundTile" x="2500"/>
+    <use href="#groundTile" x="3000"/>
+    <g transform="translate(0,250)" opacity="0.6">
+      <use href="#groundTile" x="-1000"/>
+      <use href="#groundTile" x="-500"/>
+      <use href="#groundTile" x="0"/>
+      <use href="#groundTile" x="500"/>
+      <use href="#groundTile" x="1000"/>
+      <use href="#groundTile" x="1500"/>
+      <use href="#groundTile" x="2000"/>
+    </g>
+  </g>
+
+  <!-- ================= 整车（会轻微起伏） ================= -->
+  <g id="rig">
+
+    <!-- ---------- 远侧腿 ---------- -->
+    <path id="legFarOutline" fill="none" stroke="#2A2724" stroke-width="21"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="legFarFill" fill="none" stroke="#C4783A" stroke-width="13"
+          stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- ---------- 远侧曲柄 / 脚踏 / 脚 ---------- -->
+    <g id="crankFar">
+      <path d="M 500 665 L 450 665" stroke="#6E767A" stroke-width="13" stroke-linecap="round"/>
+      <g transform="translate(450,665)">
+        <g id="pedalFar">
+          <rect x="-19" y="-6" width="38" height="12" rx="5"
+                fill="#D9822F" stroke="#2A2724" stroke-width="4"/>
+        </g>
+      </g>
+    </g>
+    <g id="footFar">
+      <use href="#foot" fill="#C4783A" stroke="#2A2724" stroke-width="5" stroke-linejoin="round"/>
+    </g>
+
+    <!-- ---------- 车轮 ---------- -->
+    <g id="wheelRear">
+      <circle cx="300" cy="665" r="117" fill="none" stroke="#164E5A" stroke-width="16"/>
+      <circle cx="300" cy="665" r="105" fill="none" stroke="#2E9AA8" stroke-width="9"/>
+      <use href="#spokesR" stroke="#A9BEC1" stroke-width="3"/>
+      <circle cx="300" cy="665" r="13" fill="#8A8F94" stroke="#164E5A" stroke-width="5"/>
+    </g>
+    <g id="wheelFront">
+      <circle cx="720" cy="665" r="117" fill="none" stroke="#164E5A" stroke-width="16"/>
+      <circle cx="720" cy="665" r="105" fill="none" stroke="#2E9AA8" stroke-width="9"/>
+      <use href="#spokesF" stroke="#A9BEC1" stroke-width="3"/>
+      <circle cx="720" cy="665" r="13" fill="#8A8F94" stroke="#164E5A" stroke-width="5"/>
+    </g>
+    <g fill="none" stroke-linecap="round">
+      <use href="#fenderR" stroke="#164E5A" stroke-width="21"/>
+      <use href="#fenderF" stroke="#164E5A" stroke-width="21"/>
+      <use href="#fenderR" stroke="#2E9AA8" stroke-width="13"/>
+      <use href="#fenderF" stroke="#2E9AA8" stroke-width="13"/>
+    </g>
+
+    <!-- ---------- 车架 ---------- -->
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <use href="#framePath" stroke="#164E5A" stroke-width="26"/>
+      <use href="#framePath" stroke="#2E9AA8" stroke-width="17"/>
+    </g>
+    <use href="#barGrip" fill="none" stroke="#2A2724" stroke-width="27" stroke-linecap="round"/>
+    <use href="#barGrip" fill="none" stroke="#1F3A3F" stroke-width="19" stroke-linecap="round"/>
+
+    <!-- 车座：整条都要缩在鸟肚子这条线下缘，往左多伸出去一截就会变成背后的一把钩子 -->
+    <path d="M 396 488 Q 402 478 422 476 L 464 474 Q 480 474 478 486
+             Q 476 498 456 498 L 408 500 Q 396 500 396 488 Z"
+          fill="#1F3A3F" stroke="#2A2724" stroke-width="9" stroke-linejoin="round"/>
+
+    <!-- 链条 -->
+    <path id="chainTop" d="M 300 649 L 500 625" stroke="#5A615F" stroke-width="6"
+          stroke-dasharray="9 9" fill="none"/>
+    <path id="chainBot" d="M 300 681 L 500 705" stroke="#5A615F" stroke-width="6"
+          stroke-dasharray="9 9" fill="none"/>
+
+    <!-- 牙盘 -->
+    <circle cx="500" cy="665" r="40" fill="#E7E2D6" stroke="#164E5A" stroke-width="8"/>
+    <circle cx="500" cy="665" r="11" fill="#8A8F94" stroke="#164E5A" stroke-width="5"/>
+
+    <!-- ---------- 近侧曲柄 / 脚踏 ---------- -->
+    <g id="crankNear">
+      <path d="M 500 665 L 550 665" stroke="#8A8F94" stroke-width="14" stroke-linecap="round"/>
+      <g transform="translate(550,665)">
+        <g id="pedalNear">
+          <rect x="-20" y="-6.5" width="40" height="13" rx="5"
+                fill="#EE8A3B" stroke="#2A2724" stroke-width="4"/>
+        </g>
+      </g>
+    </g>
+
+    <!-- ---------- 近侧腿 + 脚 ---------- -->
+    <path id="legNearOutline" fill="none" stroke="#2A2724" stroke-width="21"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="legNearFill" fill="none" stroke="#E8833A" stroke-width="13"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <g id="footNear">
+      <use href="#foot" fill="#EE8A3B" stroke="#2A2724" stroke-width="5" stroke-linejoin="round"/>
+    </g>
+
+    <!-- ---------- 鹈鹕 ---------- -->
+    <!-- 翅臂描边层垫在身体下面，避免圆头笔触在白色身体上留下深色斑块 -->
+    <use href="#armShape" fill="#2A2724" stroke="#2A2724" stroke-width="26" stroke-linejoin="round"/>
+
+    <use href="#pelicanBase" fill="#FDFAF1" stroke="#2A2724" stroke-width="14" stroke-linejoin="round"/>
+    <use href="#pelicanBase" fill="#FDFAF1" stroke="none"/>
+
+    <use href="#wing" fill="#FDFAF1" stroke="#2A2724" stroke-width="11" stroke-linejoin="round"/>
+    <!-- 只在肩部留两笔短的羽轴，够暗示羽毛层次就行；
+         画满放射状长线会立刻变回树叶。 -->
+    <g fill="none" stroke="#DCD2BC" stroke-width="3.5" stroke-linecap="round">
+      <path d="M 448 396 Q 432 408 422 424"/>
+      <path d="M 434 402 Q 420 416 412 430"/>
+    </g>
+
+    <!-- 翅臂填充层压回身体之上，让手臂「长出」身体 -->
+    <use href="#armShape" fill="#FDFAF1" stroke="none"/>
+
+    <!-- 喙 -->
+    <g stroke="#2A2724" stroke-width="13" fill="#2A2724" stroke-linejoin="round">
+      <use href="#beakUpper"/>
+      <use href="#beakPouch"/>
+    </g>
+    <g stroke="none">
+      <use href="#beakUpper" fill="#F2A03E"/>
+      <use href="#beakPouch" fill="#ED8435"/>
+    </g>
+    <use href="#beakSeam" fill="none" stroke="#2A2724" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- 眼睛也是进入海报网站的按钮，点击范围仅略大于黑色眼珠。 -->
+    <g id="eye-entry" role="button" tabindex="0" aria-label="点击鹈鹕的眼睛进入网站">
+      <circle cx="586" cy="228" r="13" fill="transparent" pointer-events="all"/>
+      <circle class="focus-ring" cx="586" cy="228" r="27" fill="none" stroke="#2E9AA8" stroke-width="5"/>
+      <circle cx="586" cy="228" r="11" fill="#2A2724"/>
+      <circle cx="582" cy="224" r="3.2" fill="#FFFFFF"/>
+    </g>
+  </g>
+
+  <!-- ================= 文案 ================= -->
+  <g font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans SC',sans-serif">
+    <text x="500" y="70" text-anchor="middle" fill="#A8A296"
+          font-size="22" letter-spacing="8">今日宜 · 兜风</text>
+    <text x="500" y="140" text-anchor="middle" fill="#2A2724"
+          font-size="52" font-weight="700" letter-spacing="4">骑慢一点，风景多一点。</text>
+  </g>
+
+</svg>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- 骑行姿态参数 ---------- */
+  var HIP_NEAR = { x: 438, y: 470 };   // 近侧腿根部（藏在身体下）
+  var HIP_FAR  = { x: 446, y: 464 };   // 远侧腿根部，略微偏移做出景深
+  var BB       = { x: 500, y: 665 };   // 中轴
+  var CRANK    = 50;                   // 曲柄长度
+  var THIGH    = 148, SHIN = 116;      // 大腿 / 小腿
+
+  var CRANK_PERIOD = 2.4;              // 踏一圈 2.4 秒
+  var WHEEL_PERIOD = 1.6;              // 车轮转一圈 1.6 秒
+  var ROLL_SPEED   = 2 * Math.PI * 117 / WHEEL_PERIOD;   // 与轮子周长匹配的地面滚动速度
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Extend the existing vector scene to the viewport edges without stretching the bird.
+  function fitScene() {
+    var aspect = window.innerWidth / window.innerHeight;
+    var width = Math.max(1000, 900 * aspect);
+    var height = width / aspect;
+    var x = (1000 - width) / 2;
+    var y = height > 900 ? Math.min(0, 790 - height * 0.82) : 0;
+    document.querySelector('svg').setAttribute('viewBox', [x, y, width, height].join(' '));
+  }
+  window.addEventListener('resize', fitScene);
+  fitScene();
+
+  function enterPosterSite() {
+    window.parent.postMessage({ type: 'ecmo:intro:enter' }, '*');
+  }
+
+  $('eye-entry').addEventListener('click', enterPosterSite);
+  $('eye-entry').addEventListener('keydown', function (event) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      enterPosterSite();
+    }
+  });
+
+  var el = {
+    rig: $('rig'), sky: $('sky'), ground: $('groundScroll'),
+    wheelRear: $('wheelRear'), wheelFront: $('wheelFront'),
+    crankNear: $('crankNear'), pedalNear: $('pedalNear'),
+    crankFar: $('crankFar'),  pedalFar: $('pedalFar'),
+    footNear: $('footNear'),  footFar: $('footFar'),
+    legNearOutline: $('legNearOutline'), legNearFill: $('legNearFill'),
+    legFarOutline: $('legFarOutline'),   legFarFill: $('legFarFill'),
+    chainTop: $('chainTop'), chainBot: $('chainBot')
+  };
+
+  var DEG = 180 / Math.PI;
+
+  /* 二骨骼 IK：已知脚踩在踏板上，反推膝盖位置。膝盖始终朝前弯。 */
+  function legPath(hip, deg) {
+    var a  = deg / DEG;
+    var fx = BB.x + CRANK * Math.cos(a);
+    var fy = BB.y + CRANK * Math.sin(a);
+
+    var vx = fx - hip.x, vy = fy - hip.y;
+    var d  = Math.sqrt(vx * vx + vy * vy);
+    var phi = Math.atan2(vy, vx);
+
+    var c = (THIGH * THIGH + d * d - SHIN * SHIN) / (2 * THIGH * d);
+    c = c < -1 ? -1 : (c > 1 ? 1 : c);
+
+    var ka = phi - Math.acos(c);
+    var kx = hip.x + THIGH * Math.cos(ka);
+    var ky = hip.y + THIGH * Math.sin(ka);
+
+    return {
+      d: 'M' + hip.x + ' ' + hip.y + 'L' + kx.toFixed(1) + ' ' + ky.toFixed(1) +
+         'L' + fx.toFixed(1) + ' ' + fy.toFixed(1),
+      fx: fx, fy: fy
+    };
+  }
+
+  /* ---------- 单一时钟驱动全部运动，保证脚永远踩在踏板上 ---------- */
+  var t0 = null;
+
+  function frame(now) {
+    if (t0 === null) t0 = now;
+    var t = (now - t0) / 1000;
+
+    var crankDeg = (t / CRANK_PERIOD) * 360;        // 曲柄（也是双腿的相位）
+    var wheelDeg = (t / WHEEL_PERIOD) * 360;        // 车轮
+
+    el.wheelRear .setAttribute('transform', 'rotate(' + wheelDeg + ' 300 665)');
+    el.wheelFront.setAttribute('transform', 'rotate(' + wheelDeg + ' 720 665)');
+
+    // 地面与云（地面速度与轮子周长对齐）
+    el.ground.setAttribute('transform', 'translate(' + (-(t * ROLL_SPEED) % 500) + ',0)');
+    el.sky   .setAttribute('transform', 'translate(' + (-(t * 16) % 900) + ',0)');
+
+    // 链条
+    var chainOffset = -(t * 105) % 18;
+    el.chainTop.setAttribute('stroke-dashoffset', chainOffset);
+    el.chainBot.setAttribute('stroke-dashoffset', -chainOffset);
+
+    // 曲柄：脚踏反向自转，始终与地面平行
+    el.crankNear.setAttribute('transform', 'rotate(' + crankDeg + ' 500 665)');
+    el.pedalNear.setAttribute('transform', 'rotate(' + (-crankDeg) + ' 0 0)');
+    el.crankFar .setAttribute('transform', 'rotate(' + (crankDeg + 180) + ' 500 665)');
+    el.pedalFar .setAttribute('transform', 'rotate(' + (-(crankDeg + 180)) + ' 0 0)');
+
+    // 双腿相差半圈
+    var near = legPath(HIP_NEAR, crankDeg % 360);
+    var far  = legPath(HIP_FAR, (crankDeg + 180) % 360);
+
+    el.legNearOutline.setAttribute('d', near.d);
+    el.legNearFill   .setAttribute('d', near.d);
+    el.legFarOutline .setAttribute('d', far.d);
+    el.legFarFill    .setAttribute('d', far.d);
+
+    el.footNear.setAttribute('transform',
+      'translate(' + near.fx.toFixed(1) + ',' + near.fy.toFixed(1) + ')');
+    el.footFar.setAttribute('transform',
+      'translate(' + far.fx.toFixed(1) + ',' + far.fy.toFixed(1) + ')');
+
+    // 整车轻微起伏：每踏一圈颠两下
+    el.rig.setAttribute('transform',
+      'translate(0,' + (Math.sin(t * Math.PI * 2 / 1.2) * 2.5).toFixed(2) + ')');
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>

@@ -9,7 +9,7 @@ const Container = styled.div`
     width: 100%;
 `
 
-const Bar = styled.div`
+const Bar = styled.form`
     background-color: rgba(255, 255, 255, 0.05);
     width: 80%;
     margin-inline: auto;
@@ -32,13 +32,23 @@ const SearchIcon = styled(FaSearch)`
 `
 const SendIcon = styled(IoSend)`
     font-size: 1.35em;
-    opacity: .25;
-    margin-inline: 15px;
+`
+const SearchButton = styled.button`
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 50px;
+    height: 50px;
+    border: 0;
+    border-radius: 0 15px 15px 0;
+    background: transparent;
+    opacity: 0.6;
     cursor: pointer;
-    transition: all 0.5s;
+    transition: opacity 0.2s, background-color 0.2s;
 
     &:hover, &:focus{
-        opacity: 1 !important;
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.08);
     }
 `
 const Spanbar = styled.span`
@@ -58,30 +68,32 @@ const Input = styled.input`
     outline: none;
     opacity: 0.77;
     width: 100%;
+    min-width: 0;
+    flex: 1;
 `
 
 function Searchbar({ onSearch }) {
     const { t } = useTranslation();
     const [searchValue, setSearchValue] = useState('');
 
-    const handleKeyDown = (e) => {
-        if (e.key === 'Enter') {
-            onSearch(searchValue);
-        }
+    const handleSubmit = (event) => {
+        event.preventDefault();
+        onSearch(searchValue.trim());
     };
 
     return (
         <Container>
-            <Bar>
+            <Bar onSubmit={handleSubmit}>
                 <SearchIcon />
                 <Spanbar />
                 <Input
+                    type="search"
+                    aria-label={t('SearchPlaceholder')}
                     placeholder={t('SearchPlaceholder')}
                     value={searchValue}
                     onChange={(e) => setSearchValue(e.target.value)}
-                    onKeyDown={handleKeyDown}
                 />
-                <SendIcon onClick={() => onSearch(searchValue)}/>
+                <SearchButton type="submit" aria-label={t('SearchSubmit')}><SendIcon /></SearchButton>
             </Bar>
         </Container>
     );
