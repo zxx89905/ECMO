@@ -17,7 +17,7 @@ import { Palette } from "color-thief-react";
 import CanvasPoster from "./CanvasPoster";
 import CanvasPoster23 from "./CanvasPoster23";
 import ManualAlbumSearch from './ManualAlbumSearch';
-import SavedPlaylistImport from './SavedPlaylistImport';
+import SavedSpotifyImport from './SavedSpotifyImport';
 import PrintDialog from './PrintDialog';
 import { parseSpotifyAlbumId, parseSpotifyPlaylistId } from '../../utils/spotifyCode';
 import { albumFileName, imageExtension } from '../../utils/downloadName';
@@ -25,6 +25,7 @@ import { getPrintPresets } from '../../utils/printPresets';
 import { encodeJpegWithDpi } from '../../utils/jpegPrint';
 import { encodeTiff } from '../../utils/tiff';
 import { getSpotifyAlbum } from '../../services/spotifyClient';
+import { loadManualCover } from '../../services/manualCover';
 
 const Container = styled.div`
     width: 80%;
@@ -67,7 +68,10 @@ const ContainerEditor = styled.div`
 
 const PosterPreview = styled.img`
     width: 388px;
-    height: 548px;
+    height: auto;
+    flex-shrink: 0;
+    align-self: flex-start;
+    max-width: 100%;
     margin-right: 20px;
 
     @media (max-width: 450px) {
@@ -262,8 +266,22 @@ const IconApply = styled(MdOutlineRefresh)`
 `
 
 const FakePoster = styled.div`
-    width: 560px;
+    width: 388px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    aspect-ratio: ${({ $ratio }) => $ratio};
     margin-right: 20px;
+    display: grid;
+    place-items: center;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    span {
+        padding: 12px;
+        font-size: 0.86rem;
+        text-align: center;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+    }
 
     @media (max-width: 450px) {
         width: 95%;
@@ -301,8 +319,11 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
     const previewRef = useRef(null);
     const posterCanvasRef = useRef(null);
     const localCoverUrlRef = useRef(null);
+    const manualCoverControllerRef = useRef(null);
+    const [manualCoverNotice, setManualCoverNotice] = useState('');
 
     useEffect(() => () => {
+        manualCoverControllerRef.current?.abort();
         if (localCoverUrlRef.current) URL.revokeObjectURL(localCoverUrlRef.current);
     }, []);
 
@@ -510,6 +531,8 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
 
     const handleFileChange = (file) => {
         if (!file) return;
+        manualCoverControllerRef.current?.abort();
+        setManualCoverNotice('');
         const url = URL.createObjectURL(file);
         if (localCoverUrlRef.current) URL.revokeObjectURL(localCoverUrlRef.current);
         localCoverUrlRef.current = url;
@@ -520,15 +543,32 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
         setFileName(file.name);
     };
 
-    const handleManualAlbumSelect = (album) => {
+    const handleManualAlbumSelect = async (album) => {
+        manualCoverControllerRef.current?.abort();
+        const controller = new AbortController();
+        manualCoverControllerRef.current = controller;
+        setManualCoverNotice(t('ManualCoverLoading'));
+        let cover;
+        try {
+            cover = await loadManualCover(album.artwork, album.thumbnail, controller.signal);
+        } catch {
+            if (controller.signal.aborted) return;
+            cover = { url: '', fallback: false };
+        }
+        if (controller.signal.aborted) {
+            if (cover.url) URL.revokeObjectURL(cover.url);
+            return;
+        }
         if (localCoverUrlRef.current) URL.revokeObjectURL(localCoverUrlRef.current);
-        localCoverUrlRef.current = null;
+        localCoverUrlRef.current = cover.url || null;
+        setManualCoverNotice(!cover.url ? t('ManualCoverUnavailable')
+            : cover.fallback ? t('ManualCoverFallback') : '');
         setAlbumName(album.name);
         setArtistsName(album.artist);
-        setAlbumCover(album.artwork || album.thumbnail);
+        setAlbumCover(cover.url);
         setUncompressedAlbumCover('');
         setUseUncompressed(false);
-        setFileName(album.source === 'spotify-saved-page' ? 'Spotify Playlist' : 'Apple Music');
+        setFileName(album.source === 'spotify-saved-page' ? album.name : 'Apple Music');
         setReleaseDate(album.releaseDate);
         setRuntime(album.runtime);
         setTracklist(album.tracklist);
@@ -730,8 +770,9 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
                         cover={albumCover} onReady={handlePaletteReady} />}
                 </Palette>}
                     {manual && <>
-                        <SavedPlaylistImport onSelect={handleManualAlbumSelect} />
+                        <SavedSpotifyImport onSelect={handleManualAlbumSelect} />
                         <ManualAlbumSearch onSelect={handleManualAlbumSelect} />
+                        {manualCoverNotice && <p role="status" style={{ margin: '0 0 14px', textShadow: '0 1px 3px #000' }}>{manualCoverNotice}</p>}
                     </>}
                     {!manual && <DivBack onClick={handleClickBack}>
                         <ArrowBack/>
@@ -766,7 +807,9 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
                         {image ? (
                             <PosterPreview src={image} ref={previewRef} />
                         ) : (
-                            <FakePoster ref={previewRef} />
+                            <FakePoster ref={previewRef} $ratio={`${posterWidth} / ${posterHeight}`}>
+                                {manual && <span>{manualCoverNotice || t('ManualPreviewPlaceholder')}</span>}
+                            </FakePoster>
                         )}
                         <EditorColumn>
                             {!manual && codeUnavailable && <p role="alert" style={{ margin: '10px 30px' }}>Spotify 条形码服务暂时不可用；海报已生成，但未包含条形码。</p>}

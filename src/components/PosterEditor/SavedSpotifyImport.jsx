@@ -1,29 +1,43 @@
 import { useId, useState } from 'react';
 import styled from 'styled-components';
 import { useTranslation } from 'react-i18next';
-import { parseSavedSpotifyPlaylistHtml } from '../../services/savedSpotifyPlaylist';
+import { parseSavedSpotifyPageHtml } from '../../services/savedSpotifyPage';
+import { IoDocumentTextOutline } from 'react-icons/io5';
 
 const Panel = styled.section`
-    margin: 20px 0 24px;
-    padding: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    border-radius: 14px;
-    background: rgba(15, 20, 24, 0.56);
-    .status { margin: 10px 0 0; color: rgba(255, 255, 255, 0.72); font-size: 0.83rem; line-height: 1.5; }
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    margin: 20px 0 14px;
+    .status {
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: rgba(18, 30, 38, 0.22);
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+        font-size: 0.83rem;
+        line-height: 1.5;
+    }
     input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     label {
         display: inline-flex;
         align-items: center;
+        gap: 8px;
         min-height: 42px;
         padding: 0 16px;
-        border: 1px solid rgba(4, 199, 166, 0.55);
-        border-radius: 9px;
-        background: rgba(4, 199, 166, 0.13);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
         color: #fff;
         font-weight: 700;
+        font-size: 0.9rem;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+        svg { font-size: 1.2rem; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
         cursor: pointer;
     }
-    label:hover { background: rgba(4, 199, 166, 0.22); }
+    label:hover { background: rgba(255, 255, 255, 0.2); border-color: rgba(86, 218, 197, 0.65); }
     input:focus-visible + label { outline: 2px solid var(--PosterfyGreen); outline-offset: 3px; }
 `;
 
@@ -36,7 +50,7 @@ function importError(error, t) {
 }
 
 // eslint-disable-next-line react/prop-types
-function SavedPlaylistImport({ onSelect }) {
+function SavedSpotifyImport({ onSelect }) {
     const { t } = useTranslation();
     const inputId = useId();
     const [busy, setBusy] = useState(false);
@@ -52,11 +66,12 @@ function SavedPlaylistImport({ onSelect }) {
         setFailed(false);
         try {
             if (!/\.html?$/i.test(file.name)) throw new Error('SAVED_PLAYLIST_INVALID');
-            const playlist = parseSavedSpotifyPlaylistHtml(await file.text());
-            onSelect(playlist);
-            const notices = [t('PlaylistSuccess', { count: playlist.trackCount, runtime: playlist.runtime })];
-            if (playlist.durationEstimated) notices.push(t('PlaylistDurationEstimated'));
-            if (!playlist.artwork) notices.push(t('PlaylistCoverMissing'));
+            const page = parseSavedSpotifyPageHtml(await file.text());
+            await onSelect(page);
+            const notices = [t('PlaylistSuccess', { count: page.trackCount, runtime: page.runtime })];
+            if (page.durationEstimated) notices.push(t('PlaylistDurationEstimated'));
+            else if (page.durationPrecision !== 'second') notices.push(t('PlaylistDurationRounded'));
+            if (!page.artwork) notices.push(t('PlaylistCoverMissing'));
             setMessage(notices.join(' '));
         } catch (error) {
             setMessage(importError(error, t));
@@ -68,9 +83,9 @@ function SavedPlaylistImport({ onSelect }) {
 
     return <Panel>
         <input id={inputId} type="file" accept=".html,.htm,text/html" onChange={handleFileChange} disabled={busy} />
-        <label htmlFor={inputId}>{busy ? t('PlaylistImporting') : t('PlaylistImportButton')}</label>
+        <label htmlFor={inputId}><IoDocumentTextOutline aria-hidden="true" />{busy ? t('PlaylistImporting') : t('PlaylistImportButton')}</label>
         {message && <p className="status" role={failed ? 'alert' : 'status'}>{message}</p>}
     </Panel>;
 }
 
-export default SavedPlaylistImport;
+export default SavedSpotifyImport;

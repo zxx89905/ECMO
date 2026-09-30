@@ -4,74 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { FaSearch } from 'react-icons/fa';
 import { IoSend } from 'react-icons/io5';
 import { getItunesAlbumTracks, searchItunesAlbums } from '../../services/itunesSearch';
+import SearchForm from '../SearchForm';
 
 const Panel = styled.section`
-    margin: 20px 0 28px;
-    p { margin-top: 10px; color: rgba(255, 255, 255, 0.72); font-size: 0.83rem; line-height: 1.5; }
-`;
-
-const SearchForm = styled.form`
-    height: 50px;
-    display: flex;
-    align-items: center;
-    overflow: hidden;
-    border-radius: 15px;
-    background: rgba(255, 255, 255, 0.05);
-    .search-icon {
-        flex: none;
-        margin-inline: 15px;
-        font-size: 1.35em;
-        opacity: 0.25;
-    }
-    .divider {
-        flex: none;
-        width: 1px;
-        height: 70%;
-        background: rgba(255, 255, 255, 0.1);
-    }
-    input {
-        min-width: 0;
-        flex: 1;
-        margin-left: 15px;
-        border: 0;
-        outline: 0;
-        background: transparent;
-        font-size: 1.2em;
-        font-weight: 600;
-        opacity: 0.77;
-    }
-    select {
-        flex: none;
-        height: 70%;
-        padding: 0 8px;
-        border: 0;
-        border-left: 1px solid rgba(255, 255, 255, 0.1);
-        outline: 0;
-        background: transparent;
-        cursor: pointer;
-        font-size: 0.9em;
-        option { background: #22262b; }
-    }
-    button {
-        flex: none;
-        display: grid;
-        place-items: center;
-        width: 50px;
-        height: 50px;
-        border: 0;
-        background: transparent;
-        cursor: pointer;
-        font-size: 1.35em;
-        opacity: 0.6;
-        transition: opacity 0.2s, background-color 0.2s;
-    }
-    button:hover:not(:disabled), button:focus-visible { opacity: 1; background: rgba(255, 255, 255, 0.08); }
-    button:disabled { opacity: 0.3; cursor: default; }
-    @media (max-width: 480px) {
-        .search-icon { margin-inline: 10px; }
-        input { margin-left: 10px; font-size: 1em; }
-        select { padding-inline: 4px; }
-    }
+    margin: 14px 0 28px;
+    p { margin-top: 10px; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); font-size: 0.83rem; line-height: 1.5; }
 `;
 
 const Results = styled.div`
@@ -90,12 +27,13 @@ const AlbumCard = styled.div`
     padding: 10px;
     border: 1px solid rgba(255, 255, 255, 0.13);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(18, 30, 38, 0.26);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
     img { flex: none; width: 58px; height: 58px; border-radius: 6px; object-fit: cover; background: #282d33; }
     .details { min-width: 0; flex: 1; }
     strong, small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     strong { font-size: 0.84rem; }
-    small { margin-top: 4px; color: rgba(255, 255, 255, 0.65); font-size: 0.74rem; }
+    small { margin-top: 4px; color: rgba(255, 255, 255, 0.88); font-size: 0.74rem; }
     a { display: inline-block; margin-top: 4px; font-size: 0.72rem; color: #75dfc9; }
     button {
         flex: none;
@@ -157,7 +95,7 @@ function ManualAlbumSearch({ onSelect }) {
             if (!controller.signal.aborted) setMessage(t('ManualTracksError'));
         } finally {
             if (!controller.signal.aborted) {
-                onSelect({ ...album, ...details });
+                await onSelect({ ...album, ...details });
                 setSelectingId(null);
             }
         }

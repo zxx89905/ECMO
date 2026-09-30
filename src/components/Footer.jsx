@@ -1,5 +1,5 @@
 import styled, { keyframes } from "styled-components"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import Icon from "./icons/icon"
 import { FaGithub, FaPalette, FaMoon, FaSun, FaLeaf, FaFire, FaWater } from "react-icons/fa"
 import { useEffect, useState } from "react"
@@ -414,10 +414,9 @@ function Footer() {
 
           <CreditText>
             <div className="credit-content">
-              {t("MadeBy")}{" "}
-              <a href="https://github.com/zxx89905" target="blank">
-                ZJT
-              </a>
+              <Trans i18nKey="MadeBy" values={{ name: 'Answer' }} components={{
+                author: <a href="https://github.com/zxx89905" target="_blank" rel="noopener noreferrer" />,
+              }} />
             </div>
           </CreditText>
 
