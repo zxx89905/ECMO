@@ -14,7 +14,7 @@ const Title = styled.p`
     margin-bottom: 5px;
 `;
 
-const InputBox = styled.div`
+const InputBox = styled.label`
     font-size: 0.85em;
     background-color: rgba(255, 255, 255, 0.05);
     border: none;
@@ -24,6 +24,8 @@ const InputBox = styled.div`
     overflow: hidden;
     display: flex;
     align-items: center;
+    cursor: ${({ $disabled }) => $disabled ? 'default' : 'pointer'};
+    opacity: ${({ $disabled }) => $disabled ? 0.55 : 1};
 `;
 
 const Input = styled.input`
@@ -40,10 +42,12 @@ const Input = styled.input`
     &:checked {
         background-color: var(--PosterfyGreen);
     }
+    &:disabled { cursor: default; }
+    &:focus-visible { outline: 2px solid var(--PosterfyGreen); outline-offset: 2px; }
 `;
 
 // ✅ 修复：这里改成 $active
-const Text = styled.p`
+const Text = styled.span`
     font-size: 0.85em;
     font-weight: bold;
     margin-left: 10px;
@@ -53,16 +57,15 @@ const Text = styled.p`
     transition: opacity 0.3s;
 `;
 
-function CheckInput({ title, text, value, onChange }) {
-    const handleToggle = () => onChange(!value);
-
+function CheckInput({ title, text, value, onChange, disabled = false }) {
     return (
         <Container>
             <Title>{title}</Title>
-            <InputBox onClick={handleToggle}>
+            <InputBox $disabled={disabled}>
                 <Input 
                     checked={value}
-                    readOnly
+                    disabled={disabled}
+                    onChange={(event) => onChange(event.target.checked)}
                     type="checkbox"
                 />
                 {/* ✅ 修复：这里改成 $active */}

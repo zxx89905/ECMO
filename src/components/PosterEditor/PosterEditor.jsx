@@ -26,6 +26,7 @@ import { encodeJpegWithDpi } from '../../utils/jpegPrint';
 import { encodeTiff } from '../../utils/tiff';
 import { getSpotifyAlbum } from '../../services/spotifyClient';
 import { loadManualCover } from '../../services/manualCover';
+import useHighResolutionCover from './useHighResolutionCover';
 
 const Container = styled.div`
     width: 80%;
@@ -307,6 +308,14 @@ const ShortcutsInfo = styled.p`
     }
 `;
 
+const CoverStatus = styled.div`
+    > p { margin: 0 10px 10px; font-size: 0.78em; line-height: 1.5; text-shadow: 0 1px 3px #000; }
+    > button {
+        margin: 0 10px 10px; padding: 5px 10px; border: 1px solid var(--PosterfyGreen);
+        border-radius: 6px; background: rgba(0, 0, 0, 0.2); color: inherit; cursor: pointer;
+    }
+`;
+
 function ApplyCoverPalette({ data, loading, cover, onReady }) {
     useEffect(() => {
         if (!loading) onReady(cover, data);
@@ -350,7 +359,9 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
     const [useFade, setUseFade] = useState(true);
     const [showTracklist, setShowTracklist] = useState(manual);
     const [albumCover, setAlbumCover] = useState('');
-    const [uncompressedAlbumCover, setUncompressedAlbumCover] = useState('');
+    const [highResAlbum, setHighResAlbum] = useState(null);
+    const highResCover = useHighResolutionCover(highResAlbum);
+    const uncompressedAlbumCover = highResCover.url;
     const [customFont, setCustomFont] = useState('');
     const [customFontFile, setCustomFontFile] = useState(null);
     const [spotifyLink, setSpotifyLink] = useState('');
@@ -539,7 +550,7 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
         setAlbumCover(url);
         setImage(null);
         setUseUncompressed(false);
-        setUncompressedAlbumCover('');
+        setHighResAlbum(null);
         setFileName(file.name);
     };
 
@@ -566,7 +577,7 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
         setAlbumName(album.name);
         setArtistsName(album.artist);
         setAlbumCover(cover.url);
-        setUncompressedAlbumCover('');
+        setHighResAlbum(null);
         setUseUncompressed(false);
         setFileName(album.source === 'spotify-saved-page' ? album.name : 'Apple Music');
         setReleaseDate(album.releaseDate);
@@ -655,33 +666,6 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
         setCurrentColorInput(null);
     }, []);
 
-    async function getItunesUncompressedAlbumCover(searchQuery, country = "us", signal) {
-        try {
-            let apiUrl = `https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&country=${country}&entity=album&limit=1`;
-            let response = await fetch(apiUrl, { signal });
-            if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-    
-            let data = await response.json();
-            if (!data.results?.length) {
-                console.warn("No album data found.");
-                return '';
-            }
-    
-            let result = data.results[0];
-            let hires = result.artworkUrl100.replace("100x100bb", "100000x100000-999");
-            let parts = hires.split("/image/thumb/");
-            
-            let uncompressedCover = parts.length === 2 
-                ? `https://a5.mzstatic.com/us/r1000/0/${parts[1].split("/").slice(0, -1).join("/")}`
-                : '';
-            return uncompressedCover;
-
-        } catch (error) {
-            console.error("Error fetching album cover:", error.message);
-            return '';
-        }
-    }
-
     useEffect(() => {
         setTitleRelease(t('EDITOR_ReleaseTitle'));
         setTitleRuntime(t('EDITOR_RuntimeTitle'));
@@ -699,9 +683,7 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
                 setAlbumCover(albumData.images?.[0]?.url || '');
                 setReleaseDate(albumData.release_date);
                 setSpotifyArtistId(albumData.artists[0]?.id);
-                const highResCover = await getItunesUncompressedAlbumCover(albumData.name + " " + formattedArtistsName, 'us', controller.signal);
-                if (controller.signal.aborted) return;
-                setUncompressedAlbumCover(highResCover);
+                setHighResAlbum(albumData);
                 
                 const runtime = albumData.tracks.items.reduce((totalDuration, track) => totalDuration + track.duration_ms, 0);
                 const totalSeconds = Math.floor(runtime / 1000);
@@ -920,12 +902,20 @@ function PosterEditor({ albumID, handleClickBack, onSwitchToManual, manual = fal
                                         onChange={(newValue) => setUseFade(newValue)}
                                         text={t('EDITOR_FadeText')}
                                     />
-                                    {!manual && <CheckInput
-                                        title={t('EDITOR_Uncompressed')}
-                                        value={useUncompressed}
-                                        onChange={(newValue) => setUseUncompressed(newValue)}
-                                        text={t('EDITOR_UncompressedText')}
-                                    />}
+                                    {!manual && <CoverStatus>
+                                        <CheckInput
+                                            title={t('EDITOR_Uncompressed')}
+                                            value={useUncompressed}
+                                            disabled={highResCover.status !== 'available'}
+                                            onChange={setUseUncompressed}
+                                            text={t('EDITOR_UncompressedText')}
+                                        />
+                                        <p role="status">{t(`EDITOR_HighRes_${highResCover.status}`, {
+                                            width: highResCover.width, height: highResCover.height
+                                        })}</p>
+                                        {['timeout', 'error'].includes(highResCover.status) &&
+                                            <button type="button" onClick={highResCover.retry}>{t('EDITOR_HighResRetry')}</button>}
+                                    </CoverStatus>}
                                     <CheckInput
                                         title={t('EDITOR_Tracklist')}
                                         value={showTracklist}
